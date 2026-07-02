@@ -21,22 +21,23 @@
     </div>
 
     <div class="stats">
-        <div class="stat"><div class="stat-num">15+</div><div class="stat-label">Platforms</div></div>
+        <div class="stat"><div class="stat-num">3</div><div class="stat-label">Search Modes</div></div>
         <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Free</div></div>
         <div class="stat"><div class="stat-num">0</div><div class="stat-label">Data Stored</div></div>
     </div>
 
     <div class="card">
-        <div class="warning">⚠ FOR EDUCATIONAL USE ONLY — Check your own digital footprint. Use responsibly and only investigate accounts you own or have permission to check.</div>
+        <div class="warning">⚠ FOR EDUCATIONAL / LEGITIMATE USE ONLY — Only search names, phone numbers, or emails with consent: your own, or someone who has agreed to be searched (e.g. background/reference checks). Do not use this to locate, track, or contact someone without their knowledge.</div>
 
         <div class="toggle">
-            <button class="active" id="btn-username" type="button">👤 USERNAME</button>
+            <button class="active" id="btn-name" type="button">🧑 NAME</button>
             <button id="btn-phone" type="button">📱 PHONE</button>
+            <button id="btn-email" type="button">📧 EMAIL</button>
         </div>
 
         <div class="input-wrapper">
             <span class="input-icon">🔍</span>
-            <input type="text" id="query" placeholder="Enter username to scan..." autocomplete="off" spellcheck="false" />
+            <input type="text" id="query" placeholder="Enter full name to search..." autocomplete="off" spellcheck="false" />
         </div>
 
         <button class="scan-btn" type="button">⚡ TRACE</button>
@@ -58,15 +59,15 @@
 
         <div class="summary-row" id="summary-row"></div>
 
-        <div id="auto-section">
-            <div class="section-label">✅ AUTO VERIFIED ACCOUNTS</div>
+        <div id="auto-section" class="hidden">
+            <div class="section-label">✅ AUTO VERIFIED</div>
             <div class="results-grid" id="results-grid"></div>
         </div>
 
         <div id="manual-section" class="hidden">
             <hr class="divider">
-            <div class="section-label">🔎 MANUALLY CHECK THESE</div>
-            <div class="manual-note"><span>⚡ These platforms block bots</span> — click to check yourself. Your query is pre-filled in the link.</div>
+            <div class="section-label">🔎 SEARCH THESE PLATFORMS</div>
+            <div class="manual-note"><span>⚡ These are pre-built search links</span> — click each to see real results. Nothing here is auto-verified as a confirmed match.</div>
             <div class="manual-grid" id="manual-grid"></div>
         </div>
 
