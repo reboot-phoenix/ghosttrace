@@ -4,291 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostTrace — Digital Footprint Checker</title>
+    <meta name="description" content="Discover your digital footprint across the internet. GhostTrace scans usernames and phone numbers across major platforms to show what the world can find about you.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👻</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #050508;
-            color: #e0e0e0;
-            font-family: 'Inter', sans-serif;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background-image:
-                linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
-            background-size: 40px 40px;
-            z-index: 0;
-            pointer-events: none;
-        }
-        body::after {
-            content: '';
-            position: fixed;
-            top: -200px; left: -200px;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 70%);
-            z-index: 0;
-            pointer-events: none;
-            animation: orb 8s ease-in-out infinite alternate;
-        }
-        @keyframes orb {
-            0% { transform: translate(0,0); }
-            100% { transform: translate(300px, 200px); }
-        }
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 700px;
-            margin: 0 auto;
-            padding: 60px 20px 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0,255,136,0.08);
-            border: 1px solid rgba(0,255,136,0.2);
-            border-radius: 100px;
-            padding: 6px 14px;
-            font-size: 0.72rem;
-            color: #00ff88;
-            letter-spacing: 2px;
-            margin-bottom: 30px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .badge::before {
-            content: '';
-            width: 6px; height: 6px;
-            background: #00ff88;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
-        }
-        .hero { text-align: center; margin-bottom: 50px; }
-        .hero h1 {
-            font-size: 5rem;
-            font-weight: 900;
-            letter-spacing: -2px;
-            line-height: 1;
-            margin-bottom: 16px;
-            background: linear-gradient(135deg, #ffffff 0%, #00ff88 50%, #00aaff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .hero p {
-            font-size: 1rem;
-            color: #555;
-            max-width: 400px;
-            margin: 0 auto;
-            line-height: 1.6;
-        }
-        .hero p span { color: #00ff88; }
-        .stats {
-            display: flex;
-            gap: 30px;
-            margin-bottom: 40px;
-            padding: 16px 30px;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid #1a1a1a;
-            border-radius: 100px;
-        }
-        .stat { text-align: center; }
-        .stat-num { font-size: 1.1rem; font-weight: 700; color: #00ff88; font-family: 'JetBrains Mono', monospace; }
-        .stat-label { font-size: 0.65rem; color: #444; letter-spacing: 1px; text-transform: uppercase; }
-        .card {
-            background: rgba(255,255,255,0.02);
-            border: 1px solid #1a1a1a;
-            border-radius: 20px;
-            padding: 35px;
-            width: 100%;
-            margin-bottom: 20px;
-            backdrop-filter: blur(10px);
-            position: relative;
-            overflow: hidden;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0,255,136,0.3), transparent);
-        }
-        .toggle {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 25px;
-            background: rgba(0,0,0,0.3);
-            padding: 5px;
-            border-radius: 12px;
-        }
-        .toggle button {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            border-radius: 8px;
-            background: transparent;
-            color: #444;
-            cursor: pointer;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            transition: all 0.2s;
-            letter-spacing: 1px;
-        }
-        .toggle button.active {
-            background: rgba(0,255,136,0.1);
-            color: #00ff88;
-            border: 1px solid rgba(0,255,136,0.2);
-        }
-        .input-wrapper { position: relative; margin-bottom: 15px; }
-        .input-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #333; font-size: 1rem; }
-        input {
-            width: 100%;
-            padding: 16px 16px 16px 45px;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid #1e1e1e;
-            border-radius: 12px;
-            color: #e0e0e0;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.95rem;
-            outline: none;
-            transition: all 0.2s;
-        }
-        input:focus {
-            border-color: rgba(0,255,136,0.4);
-            background: rgba(0,255,136,0.03);
-            box-shadow: 0 0 0 3px rgba(0,255,136,0.05);
-        }
-        input::placeholder { color: #2a2a2a; }
-        button.scan-btn {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #00ff88, #00cc66);
-            border: none;
-            border-radius: 12px;
-            color: #050508;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            font-weight: 700;
-            cursor: pointer;
-            letter-spacing: 3px;
-            transition: all 0.2s;
-        }
-        button.scan-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(0,255,136,0.3); }
-        button.scan-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-        #status {
-            color: #00ff88;
-            font-size: 0.75rem;
-            text-align: center;
-            margin-top: 12px;
-            min-height: 20px;
-            letter-spacing: 2px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .warning {
-            background: rgba(255,170,0,0.05);
-            border: 1px solid rgba(255,170,0,0.15);
-            border-radius: 10px;
-            padding: 12px 16px;
-            font-size: 0.72rem;
-            color: #ffaa00;
-            margin-bottom: 22px;
-            letter-spacing: 0.5px;
-            line-height: 1.7;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .score-box { text-align: center; padding: 30px; border-radius: 16px; margin-bottom: 25px; border: 1px solid #1a1a1a; }
-        .score-ring { width: 100px; height: 100px; margin: 0 auto 15px; position: relative; }
-        .score-ring svg { transform: rotate(-90deg); }
-        .score-ring-bg { fill: none; stroke: #1a1a1a; stroke-width: 8; }
-        .score-ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
-        .score-number { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.6rem; font-weight: 900; font-family: 'JetBrains Mono', monospace; }
-        .score-label { font-size: 0.7rem; letter-spacing: 3px; color: #444; text-transform: uppercase; }
-        .score-desc { font-size: 0.8rem; color: #555; margin-top: 8px; }
-        .section-label { font-size: 0.65rem; letter-spacing: 3px; color: #333; margin-bottom: 10px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
-        .results-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-        .divider { border: none; border-top: 1px solid #111; margin: 20px 0; }
-        .manual-note { font-size: 0.72rem; color: #333; margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; }
-        .manual-note span { color: #ffaa00; }
-        .manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .result-item {
-            padding: 14px 18px;
-            border-radius: 10px;
-            border: 1px solid #1a1a1a;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.85rem;
-            transition: all 0.2s;
-            text-decoration: none;
-            color: inherit;
-        }
-        .result-item:hover { border-color: #333; transform: translateX(3px); }
-        .result-item.found { background: rgba(0,255,136,0.03); border-color: rgba(0,255,136,0.15); }
-        .result-item.found:hover { background: rgba(0,255,136,0.06); border-color: rgba(0,255,136,0.3); }
-        .result-item.not_found { opacity: 0.25; }
-        .result-item.error { opacity: 0.15; }
-        .result-item.manual { background: rgba(255,170,0,0.03); border-color: rgba(255,170,0,0.1); }
-        .result-item.manual:hover { background: rgba(255,170,0,0.06); border-color: rgba(255,170,0,0.25); transform: translateX(3px); }
-        .result-item.link { background: rgba(0,170,255,0.03); border-color: rgba(0,170,255,0.15); }
-        .result-item.link:hover { background: rgba(0,170,255,0.06); border-color: rgba(0,170,255,0.3); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .found .dot { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
-        .not_found .dot { background: #1a1a1a; }
-        .error .dot { background: #1a1a1a; }
-        .manual .dot { background: #ffaa00; box-shadow: 0 0 6px #ffaa0066; }
-        .link .dot { background: #00aaff; box-shadow: 0 0 6px #00aaff; }
-        .result-name { flex: 1; font-weight: 600; }
-        .result-url { font-size: 0.68rem; color: #2a2a2a; font-family: 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
-        .result-arrow { color: #222; font-size: 0.8rem; transition: color 0.2s; }
-        .result-item.found:hover .result-arrow { color: #00ff88; }
-        .result-item.manual:hover .result-arrow { color: #ffaa00; }
-        .result-item.link:hover .result-arrow { color: #00aaff; }
-        .hidden { display: none; }
-        .footer { margin-top: 40px; text-align: center; font-size: 0.7rem; color: #222; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
-        .footer span { color: #333; }
-        @keyframes scanning { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-        .scanning { animation: scanning 1s infinite; }
-    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
 <div class="container">
-    <div class="badge">OSINT TOOL v1.0</div>
+
+    <div class="badge">OSINT TOOL v2.0</div>
+
     <div class="hero">
         <h1>👻 GhostTrace</h1>
         <p>Discover your <span>digital footprint</span> across the internet. See what the world can find about you.</p>
     </div>
+
     <div class="stats">
-        <div class="stat"><div class="stat-num">20+</div><div class="stat-label">Platforms</div></div>
+        <div class="stat"><div class="stat-num">15+</div><div class="stat-label">Platforms</div></div>
         <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Free</div></div>
         <div class="stat"><div class="stat-num">0</div><div class="stat-label">Data Stored</div></div>
     </div>
+
     <div class="card">
-        <div class="warning">⚠ FOR EDUCATIONAL USE ONLY — Check your own digital footprint. Use responsibly.</div>
+        <div class="warning">⚠ FOR EDUCATIONAL USE ONLY — Check your own digital footprint. Use responsibly and only investigate accounts you own or have permission to check.</div>
+
         <div class="toggle">
-            <button class="active" onclick="setType('username')" id="btn-username">👤 USERNAME</button>
-            <button onclick="setType('phone')" id="btn-phone">📱 PHONE</button>
+            <button class="active" id="btn-username" type="button">👤 USERNAME</button>
+            <button id="btn-phone" type="button">📱 PHONE</button>
         </div>
+
         <div class="input-wrapper">
             <span class="input-icon">🔍</span>
-            <input type="text" id="query" placeholder="Enter username to scan..." />
+            <input type="text" id="query" placeholder="Enter username to scan..." autocomplete="off" spellcheck="false" />
         </div>
-        <button class="scan-btn" onclick="runScan()">⚡ TRACE</button>
+
+        <button class="scan-btn" type="button">⚡ TRACE</button>
         <div id="status"></div>
     </div>
+
     <div class="card hidden" id="results-card">
         <div class="score-box">
             <div class="score-ring">
@@ -301,130 +55,41 @@
             <div class="score-label" id="score-label">EXPOSURE SCORE</div>
             <div class="score-desc" id="score-desc"></div>
         </div>
+
+        <div class="summary-row" id="summary-row"></div>
+
         <div id="auto-section">
             <div class="section-label">✅ AUTO VERIFIED ACCOUNTS</div>
             <div class="results-grid" id="results-grid"></div>
         </div>
+
         <div id="manual-section" class="hidden">
             <hr class="divider">
             <div class="section-label">🔎 MANUALLY CHECK THESE</div>
-            <div class="manual-note"><span>⚡ These platforms block bots</span> — click to check yourself. Your username is pre-filled in the link.</div>
+            <div class="manual-note"><span>⚡ These platforms block bots</span> — click to check yourself. Your query is pre-filled in the link.</div>
             <div class="manual-grid" id="manual-grid"></div>
         </div>
+
+        <div class="action-row">
+            <button class="btn-secondary" id="export-btn" type="button">📄 EXPORT REPORT</button>
+        </div>
     </div>
-    <div class="footer">Built with 🖤 by ashtid &nbsp;|&nbsp; <span>GhostTrace v1.0</span></div>
+
+    <div class="card history-card hidden" id="history-card">
+        <div class="section-label">🕓 RECENT SCANS</div>
+        <div class="history-list" id="history-list"></div>
+        <div class="action-row">
+            <button class="btn-secondary" id="clear-history-btn" type="button">CLEAR HISTORY</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        Built with 🖤 by ashtid &nbsp;|&nbsp;
+        <a href="https://github.com/reboot-phoenix/ghosttrace" target="_blank" rel="noopener noreferrer">GitHub</a>
+        &nbsp;|&nbsp; <span>GhostTrace v2.0</span>
+    </div>
 </div>
-<script>
-    let scanType = "username";
-    function setType(type) {
-        scanType = type;
-        document.getElementById("btn-username").classList.toggle("active", type === "username");
-        document.getElementById("btn-phone").classList.toggle("active", type === "phone");
-        document.getElementById("query").placeholder = type === "username"
-            ? "Enter username to scan..."
-            : "Enter phone number with country code (e.g. +91xxxxxxxxxx)...";
-    }
-    async function runScan() {
-        const query = document.getElementById("query").value.trim();
-        if (!query) return;
-        const btn = document.querySelector(".scan-btn");
-        const status = document.getElementById("status");
-        btn.disabled = true;
-        btn.textContent = "⚡ SCANNING...";
-        status.textContent = "[ TRACING DIGITAL FOOTPRINT... ]";
-        status.classList.add("scanning");
-        document.getElementById("results-card").classList.add("hidden");
-        try {
-            const res = await fetch("/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ type: scanType, query })
-            });
-            const data = await res.json();
-            if (data.error) { status.textContent = "❌ " + data.error; return; }
-            showResults(data);
-            status.textContent = "✅ TRACE COMPLETE";
-        } catch(e) {
-            status.textContent = "❌ CONNECTION FAILED";
-        } finally {
-            btn.disabled = false;
-            btn.textContent = "⚡ TRACE";
-            status.classList.remove("scanning");
-        }
-    }
-    function showResults(data) {
-        const card = document.getElementById("results-card");
-        const scoreNum = document.getElementById("score-number");
-        const scoreLabel = document.getElementById("score-label");
-        const scoreDesc = document.getElementById("score-desc");
-        const grid = document.getElementById("results-grid");
-        const manualGrid = document.getElementById("manual-grid");
-        const manualSection = document.getElementById("manual-section");
-        const ringFill = document.getElementById("score-ring-fill");
-        const score = data.score;
-        const offset = 251.2 - (score / 100) * 251.2;
-        scoreNum.textContent = score + "%";
-        setTimeout(() => { ringFill.style.strokeDashoffset = offset; }, 100);
-        if (data.type === "username") {
-            const color = score >= 60 ? "#ff0044" : score >= 30 ? "#ffaa00" : "#00ff88";
-            ringFill.style.stroke = color;
-            scoreNum.style.color = color;
-            scoreLabel.textContent = "EXPOSURE SCORE";
-            scoreDesc.textContent = score >= 60
-                ? "High exposure — widely present across platforms"
-                : score >= 30
-                ? "Moderate exposure — found on several platforms"
-                : "Low exposure — minimal online presence";
-        } else {
-            ringFill.style.stroke = "#00aaff";
-            scoreNum.style.color = "#00aaff";
-            scoreLabel.textContent = "LOOKUP LINKS";
-            scoreDesc.textContent = "Click each to search this number on that platform";
-        }
-        grid.innerHTML = "";
-        const autoResults = data.results.filter(r => r.type === "auto");
-        const found = autoResults.filter(r => r.status === "found");
-        const notFound = autoResults.filter(r => r.status !== "found");
-        [...found, ...notFound].forEach(r => {
-            const a = document.createElement("a");
-            a.className = `result-item ${r.status}`;
-            a.href = r.url || "#";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            const shortUrl = r.url ? r.url.replace(/https?:\/\//, "").split("/")[0] : "";
-            a.innerHTML = `
-                <div class="dot"></div>
-                <div class="result-name">${r.platform}</div>
-                ${r.status === "found" ? `<div class="result-url">${shortUrl}</div><div class="result-arrow">→</div>` : ""}
-            `;
-            grid.appendChild(a);
-        });
-        manualGrid.innerHTML = "";
-        const manualResults = data.results.filter(r => r.type === "manual");
-        if (manualResults.length > 0) {
-            manualSection.classList.remove("hidden");
-            manualResults.forEach(r => {
-                const a = document.createElement("a");
-                a.className = `result-item ${r.status}`;
-                a.href = r.url || "#";
-                a.target = "_blank";
-                a.rel = "noopener noreferrer";
-                a.innerHTML = `
-                    <div class="dot"></div>
-                    <div class="result-name">${r.icon || ""} ${r.platform}</div>
-                    <div class="result-arrow">→</div>
-                `;
-                manualGrid.appendChild(a);
-            });
-        } else {
-            manualSection.classList.add("hidden");
-        }
-        card.classList.remove("hidden");
-        card.scrollIntoView({ behavior: "smooth" });
-    }
-    document.getElementById("query").addEventListener("keypress", e => {
-        if (e.key === "Enter") runScan();
-    });
-</script>
+
+<script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
