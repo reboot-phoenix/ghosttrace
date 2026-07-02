@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById("btn-username").addEventListener("click", () => setType("username"));
     document.getElementById("btn-phone").addEventListener("click", () => setType("phone"));
-    document.querySelector(".scan-btn").addEventListener("click", runScan);
+    document.querySelector(".scan-btn").addEventListener("click", () => runScan());
 
     const exportBtn = document.getElementById("export-btn");
     if (exportBtn) exportBtn.addEventListener("click", exportReport);
