@@ -26,6 +26,9 @@ SEARCH_PROVIDERS = [
         "icon": "✈️",
         "url": "https://t.me/+{}"
     }
+    # NOTE: t.me/+<number> only resolves if that user has enabled
+    # "Find me by phone number" discovery in Telegram privacy settings.
+    # It's not a guaranteed match — kept as a best-effort manual link.
 ]
 
 
