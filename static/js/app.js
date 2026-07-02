@@ -2,7 +2,7 @@
 // GhostTrace — Investigation Console
 // ==========================================================
 
-let scanType = "username";
+let scanType = "name";
 let lastScanData = null;
 
 const HISTORY_KEY = "ghosttrace_history";
@@ -17,8 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.key === "Enter") runScan();
     });
 
-    document.getElementById("btn-username").addEventListener("click", () => setType("username"));
+    document.getElementById("btn-name").addEventListener("click", () => setType("name"));
     document.getElementById("btn-phone").addEventListener("click", () => setType("phone"));
+    document.getElementById("btn-email").addEventListener("click", () => setType("email"));
     document.querySelector(".scan-btn").addEventListener("click", () => runScan());
 
     const exportBtn = document.getElementById("export-btn");
@@ -32,11 +33,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function setType(type) {
     scanType = type;
-    document.getElementById("btn-username").classList.toggle("active", type === "username");
+    document.getElementById("btn-name").classList.toggle("active", type === "name");
     document.getElementById("btn-phone").classList.toggle("active", type === "phone");
-    document.getElementById("query").placeholder = type === "username"
-        ? "Enter username to scan..."
-        : "Enter phone number with country code (e.g. +91xxxxxxxxxx)...";
+    document.getElementById("btn-email").classList.toggle("active", type === "email");
+
+    const placeholders = {
+        name: "Enter full name to search...",
+        phone: "Enter phone number with country code (e.g. +91xxxxxxxxxx)...",
+        email: "Enter email address to check..."
+    };
+    document.getElementById("query").placeholder = placeholders[type];
 }
 
 // ---------- scan ----------
@@ -95,6 +101,7 @@ function showResults(data) {
     const scoreLabel = document.getElementById("score-label");
     const scoreDesc = document.getElementById("score-desc");
     const grid = document.getElementById("results-grid");
+    const autoSection = document.getElementById("auto-section");
     const manualGrid = document.getElementById("manual-grid");
     const manualSection = document.getElementById("manual-section");
     const ringFill = document.getElementById("score-ring-fill");
@@ -110,21 +117,21 @@ function showResults(data) {
         setTimeout(() => { ringFill.style.strokeDashoffset = offset; }, 80);
     });
 
-    if (data.type === "username") {
-        const color = score >= 60 ? "#ff0044" : score >= 30 ? "#ffaa00" : "#00ff88";
+    if (data.type === "email") {
+        const color = score >= 50 ? "#00ff88" : "#555";
         ringFill.style.stroke = color;
         scoreNum.style.color = color;
-        scoreLabel.textContent = "EXPOSURE SCORE";
-        scoreDesc.textContent = score >= 60
-            ? "High exposure — widely present across platforms"
-            : score >= 30
-            ? "Moderate exposure — found on several platforms"
-            : "Low exposure — minimal online presence";
+        scoreLabel.textContent = "PUBLIC DATA FOUND";
+        scoreDesc.textContent = score > 0
+            ? "This email has publicly linked profile data"
+            : "No public profile data found for this email";
     } else {
         ringFill.style.stroke = "#00aaff";
         scoreNum.style.color = "#00aaff";
-        scoreLabel.textContent = "LOOKUP LINKS";
-        scoreDesc.textContent = "Click each to search this number on that platform";
+        scoreLabel.textContent = "SEARCH COVERAGE";
+        scoreDesc.textContent = data.type === "name"
+            ? "Search links generated across major platforms — click through to check for real matches"
+            : "Click each to search this number on that platform";
     }
 
     // summary chips
@@ -138,30 +145,30 @@ function showResults(data) {
         });
     }
 
-    // auto-verified results
+    // auto-verified results (currently only email/Gravatar produces these)
     grid.innerHTML = "";
     const autoResults = data.results.filter(r => r.type === "auto");
-    const found = autoResults.filter(r => r.status === "found");
-    const notFound = autoResults.filter(r => r.status !== "found");
 
-    document.getElementById("auto-section").classList.toggle("hidden", autoResults.length === 0);
+    if (autoResults.length > 0) {
+        autoSection.classList.remove("hidden");
+        autoResults.forEach(r => {
+            const a = document.createElement("a");
+            a.className = `result-item ${r.status}`;
+            a.href = r.url || "#";
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.innerHTML = `
+                <div class="dot"></div>
+                <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform)}</div>
+                ${r.status === "found" ? `<div class="result-arrow">→</div>` : ""}
+            `;
+            grid.appendChild(a);
+        });
+    } else {
+        autoSection.classList.add("hidden");
+    }
 
-    [...found, ...notFound].forEach(r => {
-        const a = document.createElement("a");
-        a.className = `result-item ${r.status}`;
-        a.href = r.url || "#";
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        const shortUrl = r.url ? r.url.replace(/https?:\/\//, "").split("/")[0] : "";
-        a.innerHTML = `
-            <div class="dot"></div>
-            <div class="result-name">${escapeHtml(r.platform)}</div>
-            ${r.status === "found" ? `<div class="result-url">${escapeHtml(shortUrl)}</div><div class="result-arrow">→</div>` : ""}
-        `;
-        grid.appendChild(a);
-    });
-
-    // manual / link results
+    // manual / link-only results (name, phone, and email's HIBP/Google links)
     manualGrid.innerHTML = "";
     const manualResults = data.results.filter(r => r.type === "manual");
 
