@@ -1,5 +1,6 @@
-from modules.username import check_username
+from modules.name import check_name
 from modules.phone import check_phone
+from modules.email import check_email
 
 
 def scan(scan_type, query):
@@ -12,8 +13,9 @@ def scan(scan_type, query):
     scan_type = scan_type.lower().strip()
 
     scanners = {
-        "username": check_username,
+        "name": check_name,
         "phone": check_phone,
+        "email": check_email,
     }
 
     if scan_type not in scanners:
