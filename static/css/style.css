@@ -1,70 +1,248 @@
-/* ===================================================
-   GhostTrace
-   Main Stylesheet
-=================================================== */
+/* ==========================================================
+   GhostTrace v2
+   Open Source Intelligence Workspace
+========================================================== */
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
 :root{
-    --bg:#050508;
-    --card:#0d0d12;
-    --border:#1a1a1a;
-    --text:#e0e0e0;
-    --muted:#666;
-    --green:#00ff88;
-    --blue:#00aaff;
-    --orange:#ffaa00;
+
+    --bg:#06070b;
+    --bg2:#0d1117;
+
+    --card:rgba(18,22,30,.75);
+
+    --border:rgba(255,255,255,.08);
+
+    --text:#f4f6fb;
+    --muted:#97a2b8;
+
+    --green:#38ef7d;
+    --blue:#4facfe;
+    --purple:#8b5cf6;
+    --orange:#ffb347;
+
+    --radius:22px;
+
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html{
+    scroll-behavior:smooth;
 }
 
 body{
-    background:var(--bg);
-    color:var(--text);
+
     font-family:'Inter',sans-serif;
+
+    background:
+    radial-gradient(circle at top right,#182235 0%,transparent 35%),
+    radial-gradient(circle at bottom left,#132d25 0%,transparent 35%),
+    var(--bg);
+
+    color:var(--text);
+
     min-height:100vh;
+
     overflow-x:hidden;
+
 }
 
 body::before{
+
     content:"";
+
     position:fixed;
+
     inset:0;
+
     background-image:
-        linear-gradient(rgba(0,255,136,.03) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(0,255,136,.03) 1px,transparent 1px);
+
+    linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+
+    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+
     background-size:40px 40px;
-    pointer-events:none;
-    z-index:0;
-}
 
-body::after{
-    content:"";
-    position:fixed;
-    top:-200px;
-    left:-200px;
-    width:600px;
-    height:600px;
-    background:radial-gradient(circle,rgba(0,255,136,.06),transparent 70%);
-    animation:orb 8s ease-in-out infinite alternate;
     pointer-events:none;
-    z-index:0;
-}
 
-@keyframes orb{
-    from{transform:translate(0,0);}
-    to{transform:translate(300px,200px);}
 }
 
 .container{
+
     position:relative;
-    z-index:1;
-    max-width:700px;
+
+    width:min(920px,92%);
+
     margin:auto;
-    padding:60px 20px 40px;
-    display:flex;
-    flex-direction:column;
+
+    padding:70px 0;
+
+}
+
+.badge{
+
+    display:inline-flex;
+
     align-items:center;
+
+    gap:.6rem;
+
+    padding:.55rem 1rem;
+
+    border-radius:999px;
+
+    background:rgba(56,239,125,.08);
+
+    border:1px solid rgba(56,239,125,.18);
+
+    color:var(--green);
+
+    font-family:'JetBrains Mono',monospace;
+
+    font-size:.78rem;
+
+    letter-spacing:.12em;
+
+    margin-bottom:28px;
+
+}
+
+.badge::before{
+
+    content:"";
+
+    width:8px;
+
+    height:8px;
+
+    border-radius:50%;
+
+    background:var(--green);
+
+    box-shadow:0 0 12px var(--green);
+
+}
+
+.hero{
+
+    margin-bottom:45px;
+
+}
+
+.hero h1{
+
+    font-size:clamp(3rem,8vw,5.5rem);
+
+    font-weight:900;
+
+    line-height:.95;
+
+    letter-spacing:-2px;
+
+    background:linear-gradient(90deg,#fff,var(--green),var(--blue));
+
+    -webkit-background-clip:text;
+
+    -webkit-text-fill-color:transparent;
+
+}
+
+.hero p{
+
+    margin-top:18px;
+
+    max-width:650px;
+
+    color:var(--muted);
+
+    font-size:1.05rem;
+
+    line-height:1.8;
+
+}
+
+.hero p span{
+
+    color:white;
+
+    font-weight:700;
+
+}
+
+.stats{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,1fr);
+
+    gap:18px;
+
+    margin-bottom:35px;
+
+}
+
+.stat{
+
+    background:var(--card);
+
+    backdrop-filter:blur(18px);
+
+    border:1px solid var(--border);
+
+    border-radius:18px;
+
+    padding:22px;
+
+    text-align:center;
+
+}
+
+.stat-num{
+
+    font-size:1.8rem;
+
+    font-weight:800;
+
+    color:var(--green);
+
+}
+
+.stat-label{
+
+    margin-top:8px;
+
+    color:var(--muted);
+
+    font-size:.78rem;
+
+    text-transform:uppercase;
+
+    letter-spacing:.15em;
+
+}
+
+.card{
+
+    background:var(--card);
+
+    backdrop-filter:blur(20px);
+
+    border:1px solid var(--border);
+
+    border-radius:var(--radius);
+
+    padding:34px;
+
+    margin-bottom:26px;
+
+    box-shadow:
+
+    0 20px 40px rgba(0,0,0,.35);
+
 }
