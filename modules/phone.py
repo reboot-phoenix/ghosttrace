@@ -1,69 +1,92 @@
-import re
-
-SEARCH_PROVIDERS = [
-    {
-        "name": "Google Search",
-        "icon": "🔍",
-        "url": "https://www.google.com/search?q={}"
-    },
-    {
-        "name": "Truecaller",
-        "icon": "📞",
-        "url": "https://www.truecaller.com/search/in/{}"
-    },
-    {
-        "name": "Sync.me",
-        "icon": "👤",
-        "url": "https://sync.me/search/?number={}"
-    },
-    {
-        "name": "WhatsApp",
-        "icon": "💬",
-        "url": "https://wa.me/{}"
-    },
-    {
-        "name": "Telegram",
-        "icon": "✈️",
-        "url": "https://t.me/+{}"
-    }
-    # NOTE: t.me/+<number> only resolves if that user has enabled
-    # "Find me by phone number" discovery in Telegram privacy settings.
-    # It's not a guaranteed match — kept as a best-effort manual link.
-]
+import urllib.parse
 
 
-def normalize_phone(phone):
-
-    return re.sub(r"[^\d]", "", phone)
-
-
-def detect_country(phone):
-
-    if phone.startswith("91"):
-        return "India"
-
-    if phone.startswith("1"):
-        return "United States / Canada"
-
-    if phone.startswith("44"):
-        return "United Kingdom"
-
-    if phone.startswith("81"):
-        return "Japan"
-
-    if phone.startswith("61"):
-        return "Australia"
-
-    return "Unknown"
+def _q(name):
+    """URL-encode a name for use in a query string."""
+    return urllib.parse.quote(name)
 
 
-def check_phone(phone):
+def build_providers(name):
+    q = _q(name)
+    quoted_q = _q(f'"{name}"')
 
-    cleaned = normalize_phone(phone)
+    return [
+        {
+            "name": "Google",
+            "icon": "🔍",
+            "url": f"https://www.google.com/search?q={quoted_q}"
+        },
+        {
+            "name": "Google Images",
+            "icon": "🖼️",
+            "url": f"https://www.google.com/search?q={quoted_q}&tbm=isch"
+        },
+        {
+            "name": "Bing",
+            "icon": "🅱️",
+            "url": f"https://www.bing.com/search?q={quoted_q}"
+        },
+        {
+            "name": "DuckDuckGo",
+            "icon": "🦆",
+            "url": f"https://duckduckgo.com/?q={quoted_q}"
+        },
+        {
+            "name": "Facebook",
+            "icon": "👤",
+            "url": f"https://www.facebook.com/search/people/?q={q}"
+        },
+        {
+            "name": "Instagram (via Google)",
+            "icon": "📸",
+            "url": f"https://www.google.com/search?q=site:instagram.com+{quoted_q}"
+        },
+        {
+            "name": "LinkedIn",
+            "icon": "💼",
+            "url": f"https://www.linkedin.com/search/results/people/?keywords={q}"
+        },
+        {
+            "name": "X (Twitter)",
+            "icon": "🐦",
+            "url": f"https://twitter.com/search?q={quoted_q}&f=user"
+        },
+        {
+            "name": "YouTube",
+            "icon": "🎥",
+            "url": f"https://www.youtube.com/results?search_query={q}"
+        },
+        {
+            "name": "GitHub",
+            "icon": "🧑‍💻",
+            "url": f"https://github.com/search?q={q}&type=users"
+        },
+        {
+            "name": "TruePeopleSearch (US)",
+            "icon": "📇",
+            "url": f"https://www.truepeoplesearch.com/results?name={q}"
+        },
+        {
+            "name": "All Socials (Google dork)",
+            "icon": "🌐",
+            "url": (
+                f"https://www.google.com/search?q={quoted_q}+"
+                "(site:linkedin.com+OR+site:facebook.com+OR+"
+                "site:instagram.com+OR+site:twitter.com)"
+            )
+        },
+    ]
+
+
+def check_name(name):
+
+    name = name.strip()
+
+    providers = build_providers(name)
 
     results = []
 
-    for provider in SEARCH_PROVIDERS:
+    for provider in providers:
 
         results.append({
 
@@ -71,7 +94,7 @@ def check_phone(phone):
 
             "icon": provider["icon"],
 
-            "url": provider["url"].format(cleaned),
+            "url": provider["url"],
 
             "status": "link",
 
@@ -81,16 +104,17 @@ def check_phone(phone):
 
     summary = {
 
-        "country": detect_country(cleaned),
+        "query": name,
 
-        "length": len(cleaned),
+        "platforms": len(results),
 
-        "normalized": cleaned,
-
-        "providers": len(results)
+        "mode": "search links (not auto-verified)"
 
     }
 
-    score = 50
+    # Not an exposure score — these are generated search links, not
+    # confirmed matches. Score reflects link coverage, shown as
+    # "search coverage" on the frontend, not "exposure."
+    score = 100
 
     return results, score, summary
