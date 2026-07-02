@@ -1,1 +1,70 @@
-/* GhostTrace Styles */
+/* ===================================================
+   GhostTrace
+   Main Stylesheet
+=================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root{
+    --bg:#050508;
+    --card:#0d0d12;
+    --border:#1a1a1a;
+    --text:#e0e0e0;
+    --muted:#666;
+    --green:#00ff88;
+    --blue:#00aaff;
+    --orange:#ffaa00;
+}
+
+body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    overflow-x:hidden;
+}
+
+body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background-image:
+        linear-gradient(rgba(0,255,136,.03) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(0,255,136,.03) 1px,transparent 1px);
+    background-size:40px 40px;
+    pointer-events:none;
+    z-index:0;
+}
+
+body::after{
+    content:"";
+    position:fixed;
+    top:-200px;
+    left:-200px;
+    width:600px;
+    height:600px;
+    background:radial-gradient(circle,rgba(0,255,136,.06),transparent 70%);
+    animation:orb 8s ease-in-out infinite alternate;
+    pointer-events:none;
+    z-index:0;
+}
+
+@keyframes orb{
+    from{transform:translate(0,0);}
+    to{transform:translate(300px,200px);}
+}
+
+.container{
+    position:relative;
+    z-index:1;
+    max-width:700px;
+    margin:auto;
+    padding:60px 20px 40px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
