@@ -261,6 +261,8 @@
         @keyframes scanning { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
         .scanning { animation: scanning 1s infinite; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
 <div class="container">
