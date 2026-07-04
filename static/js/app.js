@@ -5,10 +5,6 @@
 let scanType = "name";
 let lastScanData = null;
 
-// Shows the tab-switch input-rule hint only once per tab, per page load,
-// so it doesn't fire an alert() every single time you click the tab.
-const hintsShown = { phone: false, email: false };
-
 const HISTORY_KEY = "ghosttrace_history";
 const MAX_HISTORY = 6;
 
@@ -18,22 +14,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderHistory();
 
     document.getElementById("btn-name").addEventListener("click", () => setType("name"));
+    document.getElementById("btn-phone").addEventListener("click", () => setType("phone"));
+    document.getElementById("btn-email").addEventListener("click", () => setType("email"));
 
-    document.getElementById("btn-phone").addEventListener("click", () => {
-        setType("phone");
-        if (!hintsShown.phone) {
-            alert("📱 Enter numeric values only for the phone number.");
-            hintsShown.phone = true;
-        }
-    });
-
-    document.getElementById("btn-email").addEventListener("click", () => {
-        setType("email");
-        if (!hintsShown.email) {
-            alert("📧 Enter a valid email address — it must contain @ and a domain (e.g. name@example.com).");
-            hintsShown.email = true;
-        }
-    });
     document.querySelector(".scan-btn").addEventListener("click", () => runScan());
 
     const exportBtn = document.getElementById("export-btn");
@@ -42,15 +25,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearBtn = document.getElementById("clear-history-btn");
     if (clearBtn) clearBtn.addEventListener("click", clearHistory);
 
-    // --- live input filtering (blocks invalid characters as you type) ---
+    // --- live input filtering ---
 
-    const nameFirst = document.getElementById("name-first");
-    const nameMiddle = document.getElementById("name-middle");
-    const nameLast = document.getElementById("name-last");
+    const nameFirst   = document.getElementById("name-first");
+    const nameMiddle  = document.getElementById("name-middle");
+    const nameLast    = document.getElementById("name-last");
     const phoneNumber = document.getElementById("phone-number");
-    const emailInput = document.getElementById("email-input");
+    const emailInput  = document.getElementById("email-input");
 
-    // Names: letters, spaces, hyphens, apostrophes only
     [nameFirst, nameMiddle, nameLast].forEach(el => {
         el.addEventListener("input", () => {
             el.value = el.value.replace(/[^a-zA-Z\s'-]/g, "");
@@ -58,19 +40,15 @@ document.addEventListener("DOMContentLoaded", () => {
         el.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
     });
 
-    // Phone: digits only
     phoneNumber.addEventListener("input", () => {
         phoneNumber.value = phoneNumber.value.replace(/[^0-9]/g, "");
     });
     phoneNumber.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
 
-    // Email: restrict to characters valid in an email address
     emailInput.addEventListener("input", () => {
         emailInput.value = emailInput.value.replace(/[^a-zA-Z0-9@._%+\-]/g, "");
     });
     emailInput.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
-
-    // --- name filter attributes (college / location / company / job title) ---
 
     document.getElementById("filter-select").addEventListener("change", (e) => {
         const type = e.target.value;
@@ -80,22 +58,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
+// ---------- filter tags ----------
+
 const FILTER_LABELS = {
-    college: "🎓 College / School",
+    college:  "🎓 College / School",
     location: "📍 Location",
-    company: "🏢 Company",
+    company:  "🏢 Company",
     jobtitle: "💼 Job Title"
 };
 
 const FILTER_PLACEHOLDERS = {
-    college: "e.g. Techno India University",
+    college:  "e.g. Techno India University",
     location: "e.g. Kolkata, India",
-    company: "e.g. Tech Mahindra",
+    company:  "e.g. Tech Mahindra",
     jobtitle: "e.g. Software Engineer"
 };
 
 function addFilterTag(type) {
-    if (document.querySelector(`.filter-tag[data-filter="${type}"]`)) return; // already added
+    if (document.querySelector(`.filter-tag[data-filter="${type}"]`)) return;
 
     const tag = document.createElement("div");
     tag.className = "filter-tag";
@@ -108,7 +88,7 @@ function addFilterTag(type) {
 
     const input = tag.querySelector(".filter-tag-input");
     input.addEventListener("input", () => {
-        input.value = input.value.replace(/"/g, ""); // strip quotes — would break query syntax
+        input.value = input.value.replace(/"/g, "");
     });
     input.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
 
@@ -133,7 +113,7 @@ function updateFilterSelectOptions() {
 
 function getActiveFilters() {
     return [...document.querySelectorAll(".filter-tag")]
-        .map(tag => document.querySelector(`.filter-tag[data-filter="${tag.dataset.filter}"] .filter-tag-input`).value.trim())
+        .map(tag => tag.querySelector(".filter-tag-input").value.trim())
         .filter(Boolean);
 }
 
@@ -164,15 +144,9 @@ function setType(type) {
     document.getElementById("group-phone").classList.toggle("hidden", type !== "phone");
     document.getElementById("group-email").classList.toggle("hidden", type !== "email");
 
-    // Switching modes wipes whatever was typed elsewhere — no stale
-    // cross-field values sneaking into a scan of the wrong type.
     clearAllInputs();
-
-    // Also clear any leftover results from a previous scan of a
-    // different type — a genuinely blank slate, not just blank inputs.
     document.getElementById("results-card").classList.add("hidden");
     lastScanData = null;
-
     document.getElementById("status").textContent = "";
 }
 
@@ -180,42 +154,39 @@ function setType(type) {
 
 function getValidatedQuery() {
     if (scanType === "name") {
-        const first = document.getElementById("name-first").value.trim();
+        const first  = document.getElementById("name-first").value.trim();
         const middle = document.getElementById("name-middle").value.trim();
-        const last = document.getElementById("name-last").value.trim();
+        const last   = document.getElementById("name-last").value.trim();
 
         if (!first || !last) {
-            alert("Please enter at least a first and last name.");
+            setStatus("⚠️ Please enter at least a first and last name.", "error");
             return null;
         }
 
         const fullName = [first, middle, last].filter(Boolean).join(" ");
-        const filters = getActiveFilters();
-
-        // Each phrase quoted separately so the search engine requires all
-        // of them to appear (not necessarily adjacent) — this is what
-        // actually narrows down common names, unlike one giant quoted blob.
-        const phrases = [`"${fullName}"`, ...filters.map(f => `"${f}"`)];
+        const filters  = getActiveFilters();
+        const phrases  = [`"${fullName}"`, ...filters.map(f => `"${f}"`)];
         return phrases.join(" ");
     }
 
     if (scanType === "phone") {
-        const country = document.getElementById("phone-country").value;
-        const number = document.getElementById("phone-number").value.trim();
+        const country = document.getElementById("phone-country").value;   // e.g. "+91"
+        const number  = document.getElementById("phone-number").value.trim();
 
         if (!/^[0-9]{6,14}$/.test(number)) {
-            alert("Please enter numeric values only — a valid phone number (6–14 digits).");
+            setStatus("⚠️ Enter digits only — between 6 and 14 numbers.", "error");
             return null;
         }
-        return country + number;
+        // Strip the leading + from the country code for the query
+        // so we get e.g. "919876543210" which detector.py handles as phone
+        const countryDigits = country.replace(/\D/g, "");
+        return countryDigits + number;
     }
 
     if (scanType === "email") {
         const email = document.getElementById("email-input").value.trim();
-        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-        if (!emailPattern.test(email)) {
-            alert("Please enter a valid email address (must contain @ and a domain, e.g. name@example.com).");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setStatus("⚠️ Enter a valid email address (e.g. name@example.com).", "error");
             return null;
         }
         return email;
@@ -226,72 +197,79 @@ function getValidatedQuery() {
 
 // ---------- scan ----------
 
+// FIX: never use textContent on the button — it wipes child <span> elements.
+// Use a data-label span inside instead.
+function setScanBtnState(scanning) {
+    const btn  = document.querySelector(".scan-btn");
+    const text = btn.querySelector(".scan-btn-text");
+    btn.disabled = scanning;
+    if (text) {
+        text.textContent = scanning ? "SCANNING..." : "INITIATE TRACE";
+    }
+}
+
+function setStatus(msg, type = "") {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className   = "status-line" + (type ? " " + type : "");
+}
+
 async function runScan(prefillQuery) {
     let query;
 
     if (prefillQuery) {
-        // used by history re-run — trusted, already-validated past query
         query = prefillQuery;
     } else {
         query = getValidatedQuery();
-        if (query === null) return; // alert already shown
+        if (query === null) return;
     }
 
-    const btn = document.querySelector(".scan-btn");
-    const status = document.getElementById("status");
-
-    btn.disabled = true;
-    btn.textContent = "⚡ SCANNING...";
-    status.classList.remove("error");
-    status.textContent = "[ TRACING DIGITAL FOOTPRINT... ]";
-    status.classList.add("scanning");
+    setScanBtnState(true);
+    setStatus("[ TRACING DIGITAL FOOTPRINT... ]", "scanning");
     document.getElementById("results-card").classList.add("hidden");
 
     try {
         const res = await fetch("/scan", {
-            method: "POST",
+            method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: scanType, query })
+            body:    JSON.stringify({ type: scanType, query })
         });
 
         const data = await res.json();
 
         if (!data.success) {
-            status.textContent = "❌ " + (data.error || "Something went wrong.");
-            status.classList.add("error");
+            setStatus("❌ " + (data.error || "Something went wrong."), "error");
             return;
         }
 
         lastScanData = data;
         showResults(data);
         saveToHistory(data);
-        status.textContent = "✅ TRACE COMPLETE";
+        setStatus("✅ TRACE COMPLETE");
+
     } catch (e) {
-        status.textContent = "❌ CONNECTION FAILED — is the server running?";
-        status.classList.add("error");
+        setStatus("❌ CONNECTION FAILED — is the server running?", "error");
     } finally {
-        btn.disabled = false;
-        btn.textContent = "⚡ TRACE";
-        status.classList.remove("scanning");
+        setScanBtnState(false);
     }
 }
 
 // ---------- render results ----------
 
 function showResults(data) {
-    const card = document.getElementById("results-card");
-    const scoreNum = document.getElementById("score-number");
-    const scoreLabel = document.getElementById("score-label");
-    const scoreDesc = document.getElementById("score-desc");
-    const grid = document.getElementById("results-grid");
-    const autoSection = document.getElementById("auto-section");
-    const manualGrid = document.getElementById("manual-grid");
+    const card          = document.getElementById("results-card");
+    const scoreNum      = document.getElementById("score-number");
+    const scoreLabel    = document.getElementById("score-label");
+    const scoreDesc     = document.getElementById("score-desc");
+    const grid          = document.getElementById("results-grid");
+    const autoSection   = document.getElementById("auto-section");
+    const manualGrid    = document.getElementById("manual-grid");
     const manualSection = document.getElementById("manual-section");
-    const ringFill = document.getElementById("score-ring-fill");
-    const summaryRow = document.getElementById("summary-row");
+    const ringFill      = document.getElementById("score-ring-fill");
+    const summaryRow    = document.getElementById("summary-row");
 
     const score = data.score;
-    const circumference = 251.2;
+    const circumference = 314.16;
     const offset = circumference - (score / 100) * circumference;
 
     scoreNum.textContent = score + "%";
@@ -301,75 +279,55 @@ function showResults(data) {
     });
 
     if (data.type === "email") {
-        const color = score >= 50 ? "#00ff88" : "#555";
-        ringFill.style.stroke = color;
-        scoreNum.style.color = color;
-        scoreLabel.textContent = "PUBLIC DATA FOUND";
-        scoreDesc.textContent = score > 0
-            ? "This email has publicly linked profile data"
-            : "No public profile data found for this email";
+        ringFill.style.stroke = score >= 30 ? "#00ff9d" : "#5a7090";
+        scoreNum.style.color  = score >= 30 ? "#00ff9d" : "#5a7090";
+        scoreLabel.textContent = "EXPOSURE";
+        scoreDesc.textContent  = score > 0
+            ? "This email has publicly linked data online."
+            : "No public profile data found for this email.";
+    } else if (data.type === "phone") {
+        ringFill.style.stroke = score >= 30 ? "#ff2d78" : "#5a7090";
+        scoreNum.style.color  = score >= 30 ? "#ff2d78" : "#5a7090";
+        scoreLabel.textContent = "EXPOSURE";
+        scoreDesc.textContent  = score > 0
+            ? "This number has public mentions online."
+            : "No public mentions found — check the manual links below.";
     } else {
-        ringFill.style.stroke = "#00aaff";
-        scoreNum.style.color = "#00aaff";
-        scoreLabel.textContent = "SEARCH COVERAGE";
-        scoreDesc.textContent = data.type === "name"
-            ? "Search links generated across major platforms — click through to check for real matches"
-            : "Click each to search this number on that platform";
+        ringFill.style.stroke = "#00d4ff";
+        scoreNum.style.color  = "#00d4ff";
+        scoreLabel.textContent = "EXPOSURE";
+        scoreDesc.textContent  = "Social platform matches found — click through to verify.";
     }
 
-    // summary chips
+    // summary chips — skip internal/noisy keys
+    const SKIP_KEYS = new Set(["normalized", "international", "search_note", "breach_note"]);
     summaryRow.innerHTML = "";
     if (data.summary) {
         Object.entries(data.summary).forEach(([key, value]) => {
+            if (SKIP_KEYS.has(key)) return;
             const chip = document.createElement("div");
             chip.className = "chip";
-            chip.innerHTML = `${formatLabel(key)}: <strong>${value}</strong>`;
+            chip.innerHTML = `${formatLabel(key)}: <strong>${escapeHtml(String(value))}</strong>`;
             summaryRow.appendChild(chip);
         });
     }
 
-    // auto-verified results (currently only email/Gravatar produces these)
+    // auto results
     grid.innerHTML = "";
-    const autoResults = data.results.filter(r => r.type === "auto");
-
+    const autoResults = (data.results || []).filter(r => r.type === "auto");
     if (autoResults.length > 0) {
         autoSection.classList.remove("hidden");
-        autoResults.forEach(r => {
-            const a = document.createElement("a");
-            a.className = `result-item ${r.status}`;
-            a.href = r.url || "#";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.innerHTML = `
-                <div class="dot"></div>
-                <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform)}</div>
-                ${r.status === "found" ? `<div class="result-arrow">→</div>` : ""}
-            `;
-            grid.appendChild(a);
-        });
+        autoResults.forEach(r => grid.appendChild(makeResultEl(r)));
     } else {
         autoSection.classList.add("hidden");
     }
 
-    // manual / link-only results (name, phone, and email's HIBP/Google links)
+    // manual results
     manualGrid.innerHTML = "";
-    const manualResults = data.results.filter(r => r.type === "manual");
-
+    const manualResults = (data.results || []).filter(r => r.type === "manual");
     if (manualResults.length > 0) {
         manualSection.classList.remove("hidden");
-        manualResults.forEach(r => {
-            const a = document.createElement("a");
-            a.className = `result-item ${r.status}`;
-            a.href = r.url || "#";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.innerHTML = `
-                <div class="dot"></div>
-                <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform)}</div>
-                <div class="result-arrow">→</div>
-            `;
-            manualGrid.appendChild(a);
-        });
+        manualResults.forEach(r => manualGrid.appendChild(makeResultEl(r)));
     } else {
         manualSection.classList.add("hidden");
     }
@@ -377,6 +335,22 @@ function showResults(data) {
     card.classList.remove("hidden");
     card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+function makeResultEl(r) {
+    const a = document.createElement("a");
+    a.className = `result-item ${r.status || "link"}`;
+    a.href      = r.url || "#";
+    a.target    = "_blank";
+    a.rel       = "noopener noreferrer";
+    a.innerHTML = `
+        <div class="dot"></div>
+        <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform || "")}</div>
+        <div class="result-arrow">→</div>
+    `;
+    return a;
+}
+
+// ---------- helpers ----------
 
 function formatLabel(key) {
     return key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -388,25 +362,17 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-// ---------- history (local, client-side only) ----------
+// ---------- history ----------
 
 function getHistory() {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-    } catch (e) {
-        return [];
-    }
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+    catch (e) { return []; }
 }
 
 function saveToHistory(data) {
     let history = getHistory();
     history = history.filter(h => !(h.query === data.query && h.type === data.type));
-    history.unshift({
-        query: data.query,
-        type: data.type,
-        score: data.score,
-        time: Date.now()
-    });
+    history.unshift({ query: data.query, type: data.type, score: data.score, time: Date.now() });
     history = history.slice(0, MAX_HISTORY);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     renderHistory();
@@ -423,11 +389,7 @@ function renderHistory() {
     if (!list || !wrap) return;
 
     const history = getHistory();
-
-    if (history.length === 0) {
-        wrap.classList.add("hidden");
-        return;
-    }
+    if (history.length === 0) { wrap.classList.add("hidden"); return; }
 
     wrap.classList.remove("hidden");
     list.innerHTML = "";
@@ -435,10 +397,9 @@ function renderHistory() {
     history.forEach(h => {
         const item = document.createElement("div");
         item.className = "history-item";
-        const when = timeAgo(h.time);
         item.innerHTML = `
             <span class="h-query">${escapeHtml(h.query)}</span>
-            <span class="h-meta">${h.type} · ${h.score}% · ${when}</span>
+            <span class="h-meta">${h.type} · ${h.score}% · ${timeAgo(h.time)}</span>
         `;
         item.addEventListener("click", () => {
             setType(h.type);
@@ -456,38 +417,32 @@ function timeAgo(ts) {
     return Math.floor(diff / 86400) + "d ago";
 }
 
-// ---------- export report ----------
+// ---------- export ----------
 
 function exportReport() {
     if (!lastScanData) return;
-
     const d = lastScanData;
-    const lines = [];
-    lines.push("GHOSTTRACE INVESTIGATION REPORT");
-    lines.push("================================");
-    lines.push(`Query:      ${d.query}`);
-    lines.push(`Type:       ${d.type}`);
-    lines.push(`Score:      ${d.score}%`);
-    lines.push(`Generated:  ${new Date().toISOString()}`);
-    lines.push("");
-    lines.push("Summary");
-    lines.push("-------");
-    Object.entries(d.summary || {}).forEach(([k, v]) => {
-        lines.push(`${formatLabel(k)}: ${v}`);
-    });
-    lines.push("");
-    lines.push("Results");
-    lines.push("-------");
-    d.results.forEach(r => {
-        lines.push(`[${(r.status || "").toUpperCase()}] ${r.platform} — ${r.url}`);
-    });
-    lines.push("");
-    lines.push("Generated by GhostTrace — for educational / personal OSINT use only.");
+    const lines = [
+        "GHOSTTRACE INVESTIGATION REPORT",
+        "================================",
+        `Query:     ${d.query}`,
+        `Type:      ${d.type}`,
+        `Score:     ${d.score}%`,
+        `Generated: ${new Date().toISOString()}`,
+        "",
+        "Summary", "-------",
+        ...Object.entries(d.summary || {}).map(([k, v]) => `${formatLabel(k)}: ${v}`),
+        "",
+        "Results", "-------",
+        ...(d.results || []).map(r => `[${(r.status || "").toUpperCase()}] ${r.platform} — ${r.url}`),
+        "",
+        "Generated by GhostTrace — for educational / personal OSINT use only.",
+    ];
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
     a.download = `ghosttrace_${d.type}_${d.query.replace(/[^a-z0-9]/gi, "_")}.txt`;
     document.body.appendChild(a);
     a.click();
