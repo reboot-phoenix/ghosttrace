@@ -2,6 +2,11 @@ import os
 
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "").strip()
 
+# Optional — real HIBP breach checking requires a paid key
+# (https://haveibeenpwned.com/API/Key). Without it, the app deep-links
+# to HIBP's own site instead of faking a result.
+HIBP_API_KEY = os.environ.get("HIBP_API_KEY", "").strip()
+
 # Domains we treat as "real profile" hits when they show up in search results.
 SOCIAL_DOMAINS = {
     "linkedin.com": "LinkedIn",
