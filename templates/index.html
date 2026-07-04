@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostTrace — Digital Footprint Intelligence</title>
-    <meta name="description" content="Discover your digital footprint across the internet. GhostTrace scans names, phone numbers and emails across major platforms.">
+    <meta name="description" content="Discover your digital footprint across the internet. GhostTrace scans names, emails, phone numbers and usernames across 50+ platforms.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👻</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
@@ -12,18 +12,14 @@
 </head>
 <body>
 
-<!-- Animated background grid -->
 <div class="bg-grid"></div>
 <div class="bg-glow bg-glow-1"></div>
 <div class="bg-glow bg-glow-2"></div>
 <div class="bg-glow bg-glow-3"></div>
-
-<!-- Scanline overlay -->
 <div class="scanlines"></div>
 
 <div class="container">
 
-    <!-- Header -->
     <header class="header">
         <div class="header-left">
             <div class="status-dot"></div>
@@ -37,28 +33,27 @@
             </div>
         </div>
         <div class="header-right">
-            <span class="badge-version">v2.0</span>
+            <span class="badge-version">v2.1</span>
         </div>
     </header>
 
-    <!-- Hero tagline -->
     <section class="hero">
         <div class="hero-eyebrow">
             <span class="terminal-cursor">▮</span>
             <span>OPEN SOURCE INTELLIGENCE</span>
         </div>
         <h1 class="hero-title">TRACE THE<br><span class="glitch" data-text="INVISIBLE.">INVISIBLE.</span></h1>
-        <p class="hero-sub">Surface what the internet knows about anyone — names, emails, phone numbers. Fast. Free. No data stored.</p>
+        <p class="hero-sub">Surface what the internet knows — names, emails, phone numbers, usernames. Fast. Free. No data stored.</p>
 
         <div class="stat-row">
             <div class="stat-pill">
-                <span class="stat-val">3</span>
+                <span class="stat-val">4</span>
                 <span class="stat-lbl">SCAN MODES</span>
             </div>
             <div class="stat-divider">|</div>
             <div class="stat-pill">
-                <span class="stat-val">100%</span>
-                <span class="stat-lbl">FREE</span>
+                <span class="stat-val">50+</span>
+                <span class="stat-lbl">PLATFORMS</span>
             </div>
             <div class="stat-divider">|</div>
             <div class="stat-pill">
@@ -68,34 +63,30 @@
         </div>
     </section>
 
-    <!-- Main scan card -->
     <div class="glass-card" id="scan-card">
 
         <div class="card-header-bar">
             <span class="card-title-text">// INVESTIGATION CONSOLE</span>
-            <div class="card-dots">
-                <span></span><span></span><span></span>
-            </div>
+            <div class="card-dots"><span></span><span></span><span></span></div>
         </div>
 
         <div class="warning-strip">
             <span class="warn-icon">⚠</span>
-            <span>FOR EDUCATIONAL &amp; LEGITIMATE USE ONLY — Only search with consent: your own data or with permission. Do not track, locate, or contact anyone without their knowledge.</span>
+            <span>FOR EDUCATIONAL &amp; LEGITIMATE USE ONLY — Only search with consent: your own data or with explicit permission. Do not track, locate, or contact anyone without their knowledge. Misuse may be illegal.</span>
         </div>
 
-        <!-- Mode toggle -->
         <div class="mode-toggle">
             <button class="mode-btn active" id="btn-name" type="button">
-                <span class="mode-icon">🧑</span>
-                <span>NAME</span>
+                <span class="mode-icon">🧑</span><span>NAME</span>
             </button>
-            <button class="mode-btn" id="btn-phone" type="button">
-                <span class="mode-icon">📱</span>
-                <span>PHONE</span>
+            <button class="mode-btn" id="btn-username" type="button">
+                <span class="mode-icon">🔎</span><span>USERNAME</span>
             </button>
             <button class="mode-btn" id="btn-email" type="button">
-                <span class="mode-icon">📧</span>
-                <span>EMAIL</span>
+                <span class="mode-icon">📧</span><span>EMAIL</span>
+            </button>
+            <button class="mode-btn" id="btn-phone" type="button">
+                <span class="mode-icon">📱</span><span>PHONE</span>
             </button>
         </div>
 
@@ -115,7 +106,6 @@
                     <input type="text" id="name-last" placeholder="e.g. Sharma" autocomplete="off" spellcheck="false" />
                 </div>
             </div>
-
             <div class="filter-row">
                 <select id="filter-select">
                     <option value="">+ NARROW RESULTS WITH A FILTER</option>
@@ -125,8 +115,31 @@
                     <option value="jobtitle">💼 Job Title</option>
                 </select>
             </div>
-
             <div class="filter-tags" id="filter-tags"></div>
+        </div>
+
+        <!-- USERNAME input -->
+        <div class="input-group hidden" id="group-username">
+            <div class="field-wrap" style="width:100%">
+                <label class="field-label">USERNAME / HANDLE</label>
+                <div class="input-icon-wrap">
+                    <span class="input-prefix">@</span>
+                    <input type="text" id="username-input" placeholder="e.g. johndoe123" autocomplete="off" spellcheck="false" />
+                </div>
+            </div>
+            <p class="field-hint">Checks 50+ platforms simultaneously — GitHub, Instagram, Reddit, TikTok, Twitter and more.</p>
+        </div>
+
+        <!-- EMAIL input -->
+        <div class="input-group hidden" id="group-email">
+            <div class="field-wrap" style="width:100%">
+                <label class="field-label">EMAIL ADDRESS</label>
+                <div class="input-icon-wrap">
+                    <span class="input-prefix">@</span>
+                    <input type="email" id="email-input" placeholder="target@domain.com" autocomplete="off" spellcheck="false" />
+                </div>
+            </div>
+            <p class="field-hint">Checks Gravatar profile, breach databases, disposable email detection, and web mentions.</p>
         </div>
 
         <!-- PHONE inputs -->
@@ -160,17 +173,7 @@
                     <input type="tel" id="phone-number" placeholder="Digits only, e.g. 9876543210" autocomplete="off" inputmode="numeric" />
                 </div>
             </div>
-        </div>
-
-        <!-- EMAIL input -->
-        <div class="input-group hidden" id="group-email">
-            <div class="field-wrap" style="width:100%">
-                <label class="field-label">EMAIL ADDRESS</label>
-                <div class="input-icon-wrap">
-                    <span class="input-prefix">@</span>
-                    <input type="email" id="email-input" placeholder="target@domain.com" autocomplete="off" spellcheck="false" />
-                </div>
-            </div>
+            <p class="field-hint">Phone OSINT uses specialized caller databases — Truecaller, NumLookup, Sync.me. Click results below after scanning.</p>
         </div>
 
         <button class="scan-btn" type="button">
@@ -190,7 +193,6 @@
             <div class="card-dots"><span></span><span></span><span></span></div>
         </div>
 
-        <!-- Score ring -->
         <div class="score-section">
             <div class="score-ring-wrap">
                 <svg viewBox="0 0 120 120" width="120" height="120">
@@ -210,7 +212,7 @@
             </div>
         </div>
 
-        <!-- Auto results -->
+        <!-- Auto-verified results -->
         <div id="auto-section" class="hidden">
             <div class="results-heading">
                 <span class="results-heading-line"></span>
@@ -220,20 +222,22 @@
             <div class="results-grid" id="results-grid"></div>
         </div>
 
-        <!-- Manual results -->
+        <!-- Manual / search links -->
         <div id="manual-section" class="hidden">
             <div class="results-heading">
                 <span class="results-heading-line"></span>
                 <span>🔎 SEARCH THESE PLATFORMS</span>
                 <span class="results-heading-line"></span>
             </div>
-            <p class="manual-note">Pre-built search links — click each to check for real matches. Not auto-verified.</p>
+            <p class="manual-note">Pre-built search links — click each to check for real matches. These are not auto-verified.</p>
             <div class="manual-grid" id="manual-grid"></div>
         </div>
 
         <div class="action-row">
-            <button class="btn-secondary" id="export-btn" type="button">📄 EXPORT REPORT</button>
+            <button class="btn-secondary" id="copy-btn" type="button">📋 COPY REPORT</button>
+            <button class="btn-secondary" id="export-btn" type="button">📄 EXPORT .TXT</button>
         </div>
+        <p class="powered-note">Breach data powered by <a href="https://leakcheck.io" target="_blank" rel="noopener">LeakCheck</a></p>
     </div>
 
     <!-- History card -->
@@ -248,7 +252,6 @@
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="footer">
         <div class="footer-line"></div>
         <div class="footer-inner">
@@ -256,7 +259,7 @@
             <span class="footer-sep">|</span>
             <a href="https://github.com/reboot-phoenix/ghosttrace" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
             <span class="footer-sep">|</span>
-            <span>GhostTrace v2.0</span>
+            <span>GhostTrace v2.1</span>
         </div>
         <p class="footer-note">No cookies. Recent scans stored only in your browser's local storage — never sent to any server.</p>
     </footer>
