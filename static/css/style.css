@@ -924,3 +924,50 @@ select option { background: #0a1020; color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- field hints ---------- */
+.field-hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-left: 2px solid var(--cyan-dim);
+    background: rgba(0,212,255,0.03);
+    border-radius: 0 4px 4px 0;
+    line-height: 1.5;
+}
+
+/* ---------- powered-by note ---------- */
+.powered-note {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 8px;
+}
+.powered-note a {
+    color: var(--cyan);
+    text-decoration: none;
+}
+.powered-note a:hover { text-decoration: underline; }
+
+/* ---------- action-row (export + copy) ---------- */
+.action-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 20px;
+}
+
+/* ---------- username not_found result styling ---------- */
+.result-item.not_found {
+    opacity: 0.38;
+    cursor: default;
+    pointer-events: none;
+}
+.result-item.not_found .dot {
+    background: var(--text-dim);
+    box-shadow: none;
+}
