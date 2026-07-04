@@ -43,7 +43,7 @@ def check_name(name):
             [{
                 "platform": "Search unavailable",
                 "icon": "⚠️",
-                "url": f"https://www.google.com/search?q=%22{urllib.parse.quote(name)}%22",
+                "url": f"https://www.google.com/search?q={urllib.parse.quote(name)}",
                 "status": "error",
                 "type": "manual"
             }],
@@ -52,13 +52,16 @@ def check_name(name):
         )
 
     try:
-        organic = _serpapi_search(f'"{name}"', num=20)
+        # `name` may already contain multiple quoted phrases built by the
+        # frontend, e.g.  "John Doe" "Stanford University" "Bengaluru"
+        # — passed through as-is so each phrase filters independently.
+        organic = _serpapi_search(name, num=20)
     except (requests.RequestException, RuntimeError) as e:
         return (
             [{
                 "platform": "Search failed",
                 "icon": "⚠️",
-                "url": f"https://www.google.com/search?q=%22{urllib.parse.quote(name)}%22",
+                "url": f"https://www.google.com/search?q={urllib.parse.quote(name)}",
                 "status": "error",
                 "type": "manual"
             }],
