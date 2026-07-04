@@ -91,7 +91,7 @@ def check_phone(phone: str) -> tuple[list[dict], int, dict]:
     # ── Web search for public mentions ───────────────────────
     # Search for both the raw digits and international format
     query = f'"{intl}" OR "{cleaned}"'
-    organic, search_error = web_search(query, num=10)
+    organic, search_error = web_search(query, num=10, scan_type="phone")
 
     found_count = 0
     for item in organic:

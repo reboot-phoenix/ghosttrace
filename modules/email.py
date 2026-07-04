@@ -159,7 +159,7 @@ def check_email(email: str) -> tuple[list[dict], int, dict]:
     # If breach check failed we still add manual links below
 
     # 3. Web search — public mentions of this email address
-    search_results, search_error = web_search(f'"{email}"', num=10)
+    search_results, search_error = web_search(f'"{email}"', num=10, scan_type="email")
     found_count = 0
     for item in search_results:
         results.append(build_result_entry(item))

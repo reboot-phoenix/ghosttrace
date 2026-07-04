@@ -21,7 +21,7 @@ def _matches(text: str, tokens: list[str]) -> bool:
 def check_name(name: str) -> tuple[list[dict], int, dict]:
     name = name.strip()
 
-    organic, search_error = web_search(name, num=10)
+    organic, search_error = web_search(name, num=10, scan_type="name")
 
     if search_error and not organic:
         fallback_url = f"https://www.google.com/search?q={urllib.parse.quote(name)}"
