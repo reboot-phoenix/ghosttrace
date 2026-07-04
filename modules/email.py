@@ -3,7 +3,7 @@ import urllib.parse
 
 import requests
 
-from config import SERPAPI_KEY, SOCIAL_DOMAINS
+from config import SERPAPI_KEY, HIBP_API_KEY, SOCIAL_DOMAINS
 
 TIMEOUT = 10
 
@@ -21,7 +21,6 @@ def _extract_domain(url):
 
 
 def _gravatar_lookup(email):
-    """Free, unauthenticated. Real profile + linked-account data if it exists."""
     h = _hash(email)
     results = []
     profile_found = False
@@ -60,6 +59,39 @@ def _gravatar_lookup(email):
     return results, profile_found, h
 
 
+def _hibp_lookup(email):
+    """
+    Real breach check via HIBP's official v3 API. Requires a paid key —
+    see https://haveibeenpwned.com/API/Key. Returns (breach_names, error).
+    """
+    headers = {
+        "hibp-api-key": HIBP_API_KEY,
+        "user-agent": "GhostTrace-OSINT-Tool",
+    }
+    url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{urllib.parse.quote(email)}"
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=TIMEOUT)
+
+        if resp.status_code == 200:
+            breaches = resp.json()
+            return [b.get("Name", "Unknown breach") for b in breaches], None
+
+        if resp.status_code == 404:
+            return [], None  # no breaches found — a real, good result
+
+        if resp.status_code == 401:
+            return None, "HIBP key invalid or expired"
+
+        if resp.status_code == 429:
+            return None, "HIBP rate limit hit — try again shortly"
+
+        return None, f"HIBP returned HTTP {resp.status_code}"
+
+    except requests.RequestException as e:
+        return None, f"HIBP request failed: {str(e)[:100]}"
+
+
 def _serpapi_search(query, num=15):
     params = {
         "engine": "google",
@@ -81,7 +113,7 @@ def check_email(email):
     encoded_email = urllib.parse.quote(email)
     results = []
 
-    # 1. Gravatar — free, real, always attempted regardless of SerpApi key
+    # 1. Gravatar — free, real, always attempted
     gravatar_results, profile_found, h = _gravatar_lookup(email)
     results.extend(gravatar_results)
 
@@ -98,7 +130,42 @@ def check_email(email):
         except requests.RequestException:
             pass
 
-    # 2. Real search hits mentioning this exact email publicly
+    # 2. Real breach check via HIBP, only if a paid key is configured
+    breach_names = None
+    hibp_error = None
+    if HIBP_API_KEY:
+        breach_names, hibp_error = _hibp_lookup(email)
+
+        if breach_names is not None:
+            if len(breach_names) > 0:
+                results.append({
+                    "platform": f"⚠️ Found in {len(breach_names)} breach(es): {', '.join(breach_names[:5])}",
+                    "icon": "🛡️",
+                    "url": f"https://haveibeenpwned.com/account/{encoded_email}",
+                    "status": "found",
+                    "type": "auto"
+                })
+            else:
+                results.append({
+                    "platform": "✅ No known breaches found (HIBP)",
+                    "icon": "🛡️",
+                    "url": f"https://haveibeenpwned.com/account/{encoded_email}",
+                    "status": "not_found",
+                    "type": "auto"
+                })
+
+    if not HIBP_API_KEY or hibp_error:
+        # No key configured, or the real call failed — deep-link instead
+        # of ever faking a breach result.
+        results.append({
+            "platform": "Have I Been Pwned — Breach Check",
+            "icon": "🛡️",
+            "url": f"https://haveibeenpwned.com/account/{encoded_email}",
+            "status": "link",
+            "type": "manual"
+        })
+
+    # 3. Real search hits mentioning this exact email publicly
     search_error = None
     if SERPAPI_KEY:
         try:
@@ -120,24 +187,22 @@ def check_email(email):
         except (requests.RequestException, RuntimeError) as e:
             search_error = str(e)[:150]
 
-    # 3. Real breach checking requires a paid HIBP key — deep-link instead
-    results.append({
-        "platform": "Have I Been Pwned — Breach Check",
-        "icon": "🛡️",
-        "url": f"https://haveibeenpwned.com/account/{encoded_email}",
-        "status": "link",
-        "type": "manual"
-    })
-
     found_count = len([r for r in results if r.get("status") == "found"])
 
     summary = {
         "gravatar_profile": "Found" if profile_found else "Not found",
         "public_mentions": found_count,
     }
+    if HIBP_API_KEY and breach_names is not None:
+        summary["breaches"] = len(breach_names)
+    elif hibp_error:
+        summary["hibp_note"] = hibp_error
+    elif not HIBP_API_KEY:
+        summary["hibp_note"] = "Not configured (HIBP_API_KEY missing — showing manual link instead)"
+
     if search_error:
         summary["search_note"] = "Web search unavailable: " + search_error
-    if not SERPAPI_KEY:
+    elif not SERPAPI_KEY:
         summary["search_note"] = "Web search not configured (SERPAPI_KEY missing)"
 
     score = min(100, found_count * 20)
