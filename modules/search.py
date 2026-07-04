@@ -1,35 +1,32 @@
 """
-modules/search.py — unified web search with smart routing
------------------------------------------------------------
-Different scan types need different search engines:
+modules/search.py — unified web search
+----------------------------------------
+Priority order (first working source wins):
+  1. SerpAPI       — paid key, 100 free searches/month
+  2. Google CSE    — free, 100 queries/day (RECOMMENDED free option)
+  3. DuckDuckGo    — free, no key, but often blocked on cloud IPs
 
-  NAME   → Google CSE  (your 41 curated social sites = perfect for names)
-            fallback → SerpAPI → DDG
+Both SerpAPI and Google CSE are reliable on Render.com.
+DuckDuckGo is a last-resort fallback and may return empty results.
 
-  PHONE  → SerpAPI first (unrestricted Google, finds phone mentions anywhere)
-            fallback → DDG
-            NOTE: CSE with specific sites NEVER finds phone numbers, skip it.
-
-  EMAIL  → SerpAPI first (same reason as phone)
-            fallback → DDG
-            NOTE: CSE skipped for same reason.
-
-Free quotas:
-  Google CSE : 100 queries/day  (use only for name)
-  SerpAPI    : 100 queries/month (use for phone + email)
-  DDG        : unlimited but often blocked on cloud IPs
+Set in Render environment variables:
+  SERPAPI_KEY    — your SerpAPI key
+  GOOGLE_CSE_KEY — Google API key with Custom Search enabled
+  GOOGLE_CSE_ID  — your Search Engine ID (cx value)
 """
 
 import logging
 import urllib.parse
+
 import requests
+
 from config import SERPAPI_KEY, GOOGLE_CSE_KEY, GOOGLE_CSE_ID, SOCIAL_DOMAINS
 
 TIMEOUT = 12
 log = logging.getLogger(__name__)
 
 
-# ── helpers ──────────────────────────────────────────────────
+# ── helpers ─────────────────────────────────────────────────
 
 def extract_domain(url: str) -> str:
     try:
@@ -39,7 +36,8 @@ def extract_domain(url: str) -> str:
         return ""
 
 
-def _normalise(results: list) -> list:
+def _normalise(results: list[dict]) -> list[dict]:
+    """Ensure every result has title/link/snippet keys."""
     out = []
     for r in results:
         link = r.get("link") or r.get("href") or r.get("url", "")
@@ -53,40 +51,18 @@ def _normalise(results: list) -> list:
     return out
 
 
-# ── engines ──────────────────────────────────────────────────
+# ── 1. SerpAPI ───────────────────────────────────────────────
 
-def _google_cse(query: str, num: int = 10) -> list:
-    """Best for NAME searches — your 41 social sites are ideal for finding people."""
-    params = {
-        "key": GOOGLE_CSE_KEY,
-        "cx":  GOOGLE_CSE_ID,
-        "q":   query,
-        "num": min(num, 10),
-    }
-    resp = requests.get(
-        "https://www.googleapis.com/customsearch/v1",
-        params=params,
-        timeout=TIMEOUT,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if "error" in data:
-        raise RuntimeError(data["error"].get("message", "Google CSE error"))
-    return _normalise([
-        {"title": i.get("title", ""), "link": i.get("link", ""), "snippet": i.get("snippet", "")}
-        for i in (data.get("items") or [])
-    ])
-
-
-def _serpapi(query: str, num: int = 10) -> list:
-    """Unrestricted Google search — essential for phone/email where CSE won't find anything."""
+def _serpapi(query: str, num: int = 10) -> list[dict]:
     params = {
         "engine":  "google",
         "q":       query,
         "num":     num,
         "api_key": SERPAPI_KEY,
     }
-    resp = requests.get("https://serpapi.com/search.json", params=params, timeout=TIMEOUT)
+    resp = requests.get(
+        "https://serpapi.com/search.json", params=params, timeout=TIMEOUT
+    )
     resp.raise_for_status()
     data = resp.json()
     if data.get("error"):
@@ -94,12 +70,55 @@ def _serpapi(query: str, num: int = 10) -> list:
     return _normalise(data.get("organic_results") or [])
 
 
-def _ddg(query: str, num: int = 10) -> list:
-    """Free fallback — often blocked on Render's shared IPs but worth trying."""
+# ── 2. Google Custom Search Engine ───────────────────────────
+
+def _google_cse(query: str, num: int = 10) -> list[dict]:
+    """
+    Google Custom Search JSON API.
+    Free tier: 100 queries/day, no credit card needed.
+    Max 10 results per request (Google hard limit).
+    Setup:
+      1. Go to https://programmablesearchengine.google.com
+         Create a search engine, set it to search the entire web.
+         Copy the Search Engine ID (cx value) → GOOGLE_CSE_ID
+      2. Go to https://console.cloud.google.com
+         Enable "Custom Search API", create an API key → GOOGLE_CSE_KEY
+    """
+    params = {
+        "key": GOOGLE_CSE_KEY,
+        "cx":  GOOGLE_CSE_ID,
+        "q":   query,
+        "num": min(num, 10),  # CSE hard limit is 10 per call
+    }
+    resp = requests.get(
+        "https://www.googleapis.com/customsearch/v1",
+        params=params,
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items") or []
+    return _normalise([
+        {
+            "title":   i.get("title", ""),
+            "link":    i.get("link", ""),
+            "snippet": i.get("snippet", ""),
+        }
+        for i in items
+    ])
+
+
+# ── 3. DuckDuckGo fallback ───────────────────────────────────
+
+def _ddg(query: str, num: int = 10) -> list[dict]:
+    """
+    Uses the ddgs package (free, no key).
+    Often blocked on shared cloud IPs — treat as last resort.
+    """
     try:
         from ddgs import DDGS
     except ImportError:
         from duckduckgo_search import DDGS  # type: ignore
+
     results = []
     with DDGS() as ddgs:
         for r in ddgs.text(query, max_results=num):
@@ -109,53 +128,51 @@ def _ddg(query: str, num: int = 10) -> list:
 
 # ── Public interface ─────────────────────────────────────────
 
-def web_search(query: str, num: int = 10, scan_type: str = "name") -> tuple:
+def web_search(query: str, num: int = 10) -> tuple[list[dict], str | None]:
     """
-    Smart routing based on scan_type:
-      'name'          → CSE → SerpAPI → DDG
-      'phone'/'email' → SerpAPI → DDG   (CSE skipped — won't find these on specific sites)
-
     Returns (results, error_string_or_None).
+
+    Tries configured sources in priority order:
+      SerpAPI → Google CSE → DuckDuckGo
+
+    num is capped at 10 for Google CSE compatibility.
+    SerpAPI and DDG also get 10 to keep quota usage consistent.
     """
-    num = min(num, 10)
-    errors = []
+    num = min(num, 10)  # cap across all engines to be quota-friendly
 
-    if scan_type == "name":
-        # CSE first — your curated 41 social sites are perfect for finding people
-        if GOOGLE_CSE_KEY and GOOGLE_CSE_ID:
-            try:
-                results = _google_cse(query, num)
-                if results:
-                    return results, None
-                log.warning("CSE: 0 results for name query: %s", query)
-            except Exception as e:
-                errors.append(f"CSE: {e}")
-                log.warning("CSE failed: %s", e)
-
-    # For phone/email: skip CSE entirely, go straight to SerpAPI
+    # 1. SerpAPI
     if SERPAPI_KEY:
         try:
             results = _serpapi(query, num)
             if results:
                 return results, None
-            log.warning("SerpAPI: 0 results for: %s", query)
+            log.warning("SerpAPI returned empty results, trying next source")
         except Exception as e:
-            errors.append(f"SerpAPI: {e}")
-            log.warning("SerpAPI failed: %s", e)
+            log.warning("SerpAPI failed (%s), trying Google CSE", e)
 
-    # Last resort
+    # 2. Google CSE
+    if GOOGLE_CSE_KEY and GOOGLE_CSE_ID:
+        try:
+            results = _google_cse(query, num)
+            if results:
+                return results, None
+            log.warning("Google CSE returned empty results, trying DDG")
+        except Exception as e:
+            log.warning("Google CSE failed (%s), falling back to DDG", e)
+
+    # 3. DuckDuckGo (last resort)
     try:
         results = _ddg(query, num)
         return results, None
     except Exception as e:
-        errors.append(f"DDG: {e}")
-        return [], " | ".join(errors[-2:])
+        return [], f"All search sources failed. Last error: {str(e)[:120]}"
 
 
 def build_result_entry(item: dict) -> dict:
-    link     = item["link"]
-    title    = item.get("title", "Result")
-    domain   = extract_domain(link)
+    """Turn a raw search hit into a GhostTrace result dict."""
+    link    = item["link"]
+    title   = item.get("title", "Result")
+    domain  = extract_domain(link)
     platform = SOCIAL_DOMAINS.get(domain)
     return {
         "platform": platform if platform else title[:60],

@@ -138,9 +138,14 @@ def _leakcheck_public(email: str) -> tuple[list[str] | None, str | None]:
 
     if not data.get("success"):
         msg = data.get("message", "")
-        if "not found" in msg.lower() or data.get("found") == 0:
+        # Empty message, "not found" text, or found=0 all mean clean — no breach
+        if not msg or "not found" in msg.lower() or data.get("found") == 0:
             return [], None
         return None, f"LeakCheck public error: {msg}"
+
+    # found=0 even on success means clean
+    if data.get("found") == 0:
+        return [], None
 
     # Response shape: { "success": true, "found": 3, "sources": [{"name": "...", "date": "..."}, ...] }
     sources = [s.get("name", "Unknown") for s in data.get("sources") or []]
