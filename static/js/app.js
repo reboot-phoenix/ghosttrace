@@ -288,7 +288,15 @@ function showResults(data) {
         ringFill.style.stroke = "#ff2d78";
         scoreNum.style.color  = "#ff2d78";
         scoreLabel.textContent = "PLATFORM PRESENCE";
-        scoreDesc.textContent  = `Found on ${data.summary?.platforms_found || 0} of ${data.summary?.platforms_checked || 50}+ platforms checked`;
+        const found = data.summary?.platforms_found || 0;
+        const checked = data.summary?.platforms_checked || 30;
+        scoreDesc.textContent = found > 0
+            ? `Confirmed on ${found} platform${found !== 1 ? "s" : ""} out of ${checked} checked`
+            : `No confirmed accounts found across ${checked} platforms`;
+
+        // update heading label
+        const autoHeading = document.querySelector("#auto-section .results-heading span:nth-child(2)");
+        if (autoHeading) autoHeading.textContent = "✅ CONFIRMED ACCOUNTS";
     } else if (data.type === "phone") {
         ringFill.style.stroke = "#ffe040";
         scoreNum.style.color  = "#ffe040";
@@ -314,23 +322,62 @@ function showResults(data) {
 
     // Auto-verified results
     grid.innerHTML = "";
-    const autoResults = data.results.filter(r => r.type === "auto");
+    const autoResults = data.results.filter(r => r.type === "auto" && r.status === "found");
 
     if (autoResults.length > 0) {
         autoSection.classList.remove("hidden");
-        autoResults.forEach(r => {
-            const a = document.createElement("a");
-            a.className = `result-item ${r.status}`;
-            a.href = r.url || "#";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.innerHTML = `
-                <div class="dot"></div>
-                <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform)}</div>
-                ${r.status === "found" ? `<div class="result-arrow">→</div>` : ""}
-            `;
-            grid.appendChild(a);
-        });
+
+        if (data.type === "username") {
+            // Username scan: show profile cards
+            grid.className = "results-grid profile-grid";
+            autoResults.forEach(r => {
+                const a = document.createElement("a");
+                a.className = "profile-card";
+                a.href = r.url || "#";
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+
+                const avatarHtml = r.avatar
+                    ? `<img class="profile-avatar" src="${escapeHtml(r.avatar)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="profile-avatar-fallback" style="display:none">${escapeHtml(r.icon || "👤")}</div>`
+                    : `<div class="profile-avatar-fallback">${escapeHtml(r.icon || "👤")}</div>`;
+
+                const bioHtml = r.bio
+                    ? `<div class="profile-bio">${escapeHtml(r.bio)}</div>` : "";
+
+                const metaHtml = r.meta
+                    ? `<div class="profile-meta">${escapeHtml(r.meta)}</div>` : "";
+
+                a.innerHTML = `
+                    <div class="profile-card-top">
+                        <div class="profile-avatar-wrap">${avatarHtml}</div>
+                        <div class="profile-info">
+                            <div class="profile-platform">${escapeHtml(r.icon || "")} ${escapeHtml(r.platform)}</div>
+                            <div class="profile-name">@${escapeHtml(r.display_name || r.platform)}</div>
+                            ${bioHtml}
+                            ${metaHtml}
+                        </div>
+                    </div>
+                    <div class="profile-card-footer">VIEW PROFILE →</div>
+                `;
+                grid.appendChild(a);
+            });
+        } else {
+            // Name/email scan: plain result items
+            grid.className = "results-grid";
+            autoResults.forEach(r => {
+                const a = document.createElement("a");
+                a.className = `result-item ${r.status}`;
+                a.href = r.url || "#";
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.innerHTML = `
+                    <div class="dot"></div>
+                    <div class="result-name">${r.icon ? r.icon + " " : ""}${escapeHtml(r.platform)}</div>
+                    <div class="result-arrow">→</div>
+                `;
+                grid.appendChild(a);
+            });
+        }
     } else {
         autoSection.classList.add("hidden");
     }
