@@ -21,27 +21,32 @@ def _matches(text: str, tokens: list[str]) -> bool:
 def check_name(name: str) -> tuple[list[dict], int, dict]:
     name = name.strip()
 
-    organic, search_error = web_search(name, num=20)
+    organic, search_error = web_search(name, num=10)
 
     if search_error and not organic:
         fallback_url = f"https://www.google.com/search?q={urllib.parse.quote(name)}"
         return (
-            [{"platform": "Search failed — try Google directly",
-              "icon": "⚠️", "url": fallback_url, "status": "error", "type": "manual"}],
+            [{
+                "platform": "Search failed — try Google directly",
+                "icon":     "⚠️",
+                "url":      fallback_url,
+                "status":   "error",
+                "type":     "manual",
+            }],
             0,
             {"error": search_error},
         )
 
-    # Relevance filter using only the person-name portion
+    # Relevance filter — only keep results that contain the person's name
     name_only = name.split('"')[1] if name.count('"') >= 2 else name
-    tokens = _name_tokens(name_only)
+    tokens    = _name_tokens(name_only)
 
     social_hits, other_hits = [], []
     discarded = 0
 
     for item in organic:
-        link  = item.get("link", "")
-        title = item.get("title", "Result")
+        link    = item.get("link", "")
+        title   = item.get("title", "Result")
         snippet = item.get("snippet", "")
         combined = f"{title} {snippet}"
 
@@ -63,16 +68,23 @@ def check_name(name: str) -> tuple[list[dict], int, dict]:
 
     results = social_hits + other_hits[:8]
 
-    from config import SERPAPI_KEY
+    from config import SERPAPI_KEY, GOOGLE_CSE_KEY
+    if SERPAPI_KEY:
+        engine = "SerpAPI"
+    elif GOOGLE_CSE_KEY:
+        engine = "Google CSE (free)"
+    else:
+        engine = "DuckDuckGo (free)"
+
     summary: dict = {
         "query":          name,
         "social_matches": len(social_hits),
         "total_results":  len(results),
         "filtered_out":   discarded,
-        "search_engine":  "SerpAPI" if SERPAPI_KEY else "DuckDuckGo (free)",
+        "search_engine":  engine,
     }
     if search_error:
-        summary["search_note"] = "Partial results — search error: " + search_error
+        summary["search_note"] = "Partial results — " + search_error
 
     score = min(100, len(social_hits) * 20)
     return results, score, summary
