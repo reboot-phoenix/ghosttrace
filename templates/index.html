@@ -3,49 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GhostTrace — Digital Footprint Checker</title>
-    <meta name="description" content="Discover your digital footprint across the internet. GhostTrace scans usernames and phone numbers across major platforms to show what the world can find about you.">
+    <title>GhostTrace — Digital Footprint Intelligence</title>
+    <meta name="description" content="Discover your digital footprint across the internet. GhostTrace scans names, phone numbers and emails across major platforms.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👻</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+
+<!-- Animated background grid -->
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+<div class="bg-glow bg-glow-3"></div>
+
+<!-- Scanline overlay -->
+<div class="scanlines"></div>
+
 <div class="container">
 
-    <div class="badge">OSINT TOOL v2.0</div>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="status-dot"></div>
+            <span class="header-sys">SYS_ONLINE</span>
+        </div>
+        <div class="logo-wrap">
+            <div class="logo-ghost">👻</div>
+            <div class="logo-text">
+                <span class="logo-main">GHOST<span class="logo-accent">TRACE</span></span>
+                <span class="logo-sub">DIGITAL INTELLIGENCE PLATFORM</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <span class="badge-version">v2.0</span>
+        </div>
+    </header>
 
-    <div class="hero">
-        <h1>👻 GhostTrace</h1>
-        <p>Discover your <span>digital footprint</span> across the internet. See what the world can find about you.</p>
-    </div>
+    <!-- Hero tagline -->
+    <section class="hero">
+        <div class="hero-eyebrow">
+            <span class="terminal-cursor">▮</span>
+            <span>OPEN SOURCE INTELLIGENCE</span>
+        </div>
+        <h1 class="hero-title">TRACE THE<br><span class="glitch" data-text="INVISIBLE.">INVISIBLE.</span></h1>
+        <p class="hero-sub">Surface what the internet knows about anyone — names, emails, phone numbers. Fast. Free. No data stored.</p>
 
-    <div class="stats">
-        <div class="stat"><div class="stat-num">3</div><div class="stat-label">Search Modes</div></div>
-        <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Free</div></div>
-        <div class="stat"><div class="stat-num">0</div><div class="stat-label">Data Stored</div></div>
-    </div>
+        <div class="stat-row">
+            <div class="stat-pill">
+                <span class="stat-val">3</span>
+                <span class="stat-lbl">SCAN MODES</span>
+            </div>
+            <div class="stat-divider">|</div>
+            <div class="stat-pill">
+                <span class="stat-val">100%</span>
+                <span class="stat-lbl">FREE</span>
+            </div>
+            <div class="stat-divider">|</div>
+            <div class="stat-pill">
+                <span class="stat-val">0</span>
+                <span class="stat-lbl">DATA STORED</span>
+            </div>
+        </div>
+    </section>
 
-    <div class="card">
-        <div class="warning">⚠ FOR EDUCATIONAL / LEGITIMATE USE ONLY — Only search names, phone numbers, or emails with consent: your own, or someone who has agreed to be searched (e.g. background/reference checks). Do not use this to locate, track, or contact someone without their knowledge.</div>
+    <!-- Main scan card -->
+    <div class="glass-card" id="scan-card">
 
-        <div class="toggle">
-            <button class="active" id="btn-name" type="button">🧑 NAME</button>
-            <button id="btn-phone" type="button">📱 PHONE</button>
-            <button id="btn-email" type="button">📧 EMAIL</button>
+        <div class="card-header-bar">
+            <span class="card-title-text">// INVESTIGATION CONSOLE</span>
+            <div class="card-dots">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <div class="warning-strip">
+            <span class="warn-icon">⚠</span>
+            <span>FOR EDUCATIONAL &amp; LEGITIMATE USE ONLY — Only search with consent: your own data or with permission. Do not track, locate, or contact anyone without their knowledge.</span>
+        </div>
+
+        <!-- Mode toggle -->
+        <div class="mode-toggle">
+            <button class="mode-btn active" id="btn-name" type="button">
+                <span class="mode-icon">🧑</span>
+                <span>NAME</span>
+            </button>
+            <button class="mode-btn" id="btn-phone" type="button">
+                <span class="mode-icon">📱</span>
+                <span>PHONE</span>
+            </button>
+            <button class="mode-btn" id="btn-email" type="button">
+                <span class="mode-icon">📧</span>
+                <span>EMAIL</span>
+            </button>
         </div>
 
         <!-- NAME inputs -->
         <div class="input-group" id="group-name">
             <div class="input-row">
-                <input type="text" id="name-first" placeholder="First name" autocomplete="off" spellcheck="false" />
-                <input type="text" id="name-middle" placeholder="Middle (optional)" autocomplete="off" spellcheck="false" />
-                <input type="text" id="name-last" placeholder="Last name" autocomplete="off" spellcheck="false" />
+                <div class="field-wrap">
+                    <label class="field-label">FIRST NAME</label>
+                    <input type="text" id="name-first" placeholder="e.g. Aditya" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="field-wrap field-wrap--sm">
+                    <label class="field-label">MIDDLE <span class="opt">(OPT)</span></label>
+                    <input type="text" id="name-middle" placeholder="e.g. Kumar" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="field-wrap">
+                    <label class="field-label">LAST NAME</label>
+                    <input type="text" id="name-last" placeholder="e.g. Sharma" autocomplete="off" spellcheck="false" />
+                </div>
             </div>
 
-            <div class="filter-add-row">
+            <div class="filter-row">
                 <select id="filter-select">
-                    <option value="">+ Add a filter to narrow results (optional)</option>
+                    <option value="">+ NARROW RESULTS WITH A FILTER</option>
                     <option value="college">🎓 College / School</option>
                     <option value="location">📍 Location</option>
                     <option value="company">🏢 Company</option>
@@ -59,66 +132,102 @@
         <!-- PHONE inputs -->
         <div class="input-group hidden" id="group-phone">
             <div class="input-row phone-row">
-                <select id="phone-country">
-                    <option value="+91" selected>🇮🇳 India (+91)</option>
-                    <option value="+1">🇺🇸 USA/Canada (+1)</option>
-                    <option value="+44">🇬🇧 UK (+44)</option>
-                    <option value="+61">🇦🇺 Australia (+61)</option>
-                    <option value="+971">🇦🇪 UAE (+971)</option>
-                    <option value="+65">🇸🇬 Singapore (+65)</option>
-                    <option value="+92">🇵🇰 Pakistan (+92)</option>
-                    <option value="+880">🇧🇩 Bangladesh (+880)</option>
-                    <option value="+977">🇳🇵 Nepal (+977)</option>
-                    <option value="+94">🇱🇰 Sri Lanka (+94)</option>
-                    <option value="+49">🇩🇪 Germany (+49)</option>
-                    <option value="+33">🇫🇷 France (+33)</option>
-                    <option value="+81">🇯🇵 Japan (+81)</option>
-                    <option value="+86">🇨🇳 China (+86)</option>
-                    <option value="+7">🇷🇺 Russia (+7)</option>
-                    <option value="+55">🇧🇷 Brazil (+55)</option>
-                    <option value="+27">🇿🇦 South Africa (+27)</option>
-                    <option value="+234">🇳🇬 Nigeria (+234)</option>
-                </select>
-                <input type="tel" id="phone-number" placeholder="Phone number" autocomplete="off" inputmode="numeric" />
+                <div class="field-wrap field-wrap--xs">
+                    <label class="field-label">COUNTRY</label>
+                    <select id="phone-country">
+                        <option value="+91" selected>🇮🇳 +91</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+61">🇦🇺 +61</option>
+                        <option value="+971">🇦🇪 +971</option>
+                        <option value="+65">🇸🇬 +65</option>
+                        <option value="+92">🇵🇰 +92</option>
+                        <option value="+880">🇧🇩 +880</option>
+                        <option value="+977">🇳🇵 +977</option>
+                        <option value="+94">🇱🇰 +94</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+33">🇫🇷 +33</option>
+                        <option value="+81">🇯🇵 +81</option>
+                        <option value="+86">🇨🇳 +86</option>
+                        <option value="+7">🇷🇺 +7</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+27">🇿🇦 +27</option>
+                        <option value="+234">🇳🇬 +234</option>
+                    </select>
+                </div>
+                <div class="field-wrap" style="flex:1">
+                    <label class="field-label">PHONE NUMBER</label>
+                    <input type="tel" id="phone-number" placeholder="Digits only, e.g. 9876543210" autocomplete="off" inputmode="numeric" />
+                </div>
             </div>
         </div>
 
         <!-- EMAIL input -->
         <div class="input-group hidden" id="group-email">
-            <div class="input-wrapper">
-                <span class="input-icon">📧</span>
-                <input type="email" id="email-input" placeholder="Enter email address..." autocomplete="off" spellcheck="false" />
+            <div class="field-wrap" style="width:100%">
+                <label class="field-label">EMAIL ADDRESS</label>
+                <div class="input-icon-wrap">
+                    <span class="input-prefix">@</span>
+                    <input type="email" id="email-input" placeholder="target@domain.com" autocomplete="off" spellcheck="false" />
+                </div>
             </div>
         </div>
 
-        <button class="scan-btn" type="button">⚡ TRACE</button>
-        <div id="status"></div>
+        <button class="scan-btn" type="button">
+            <span class="scan-btn-icon">⚡</span>
+            <span class="scan-btn-text">INITIATE TRACE</span>
+            <span class="scan-btn-bar"></span>
+        </button>
+
+        <div id="status" class="status-line"></div>
     </div>
 
-    <div class="card hidden" id="results-card">
-        <div class="score-box">
-            <div class="score-ring">
-                <svg viewBox="0 0 100 100" width="100" height="100">
-                    <circle class="score-ring-bg" cx="50" cy="50" r="40"/>
-                    <circle class="score-ring-fill" id="score-ring-fill" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
-                </svg>
-                <div class="score-number" id="score-number">0%</div>
-            </div>
-            <div class="score-label" id="score-label">EXPOSURE SCORE</div>
-            <div class="score-desc" id="score-desc"></div>
+    <!-- Results card -->
+    <div class="glass-card hidden" id="results-card">
+
+        <div class="card-header-bar">
+            <span class="card-title-text">// TRACE RESULTS</span>
+            <div class="card-dots"><span></span><span></span><span></span></div>
         </div>
 
-        <div class="summary-row" id="summary-row"></div>
+        <!-- Score ring -->
+        <div class="score-section">
+            <div class="score-ring-wrap">
+                <svg viewBox="0 0 120 120" width="120" height="120">
+                    <circle class="score-ring-bg" cx="60" cy="60" r="50"/>
+                    <circle class="score-ring-fill" id="score-ring-fill" cx="60" cy="60" r="50"
+                        stroke-dasharray="314.16" stroke-dashoffset="314.16"
+                        transform="rotate(-90 60 60)"/>
+                </svg>
+                <div class="score-inner">
+                    <div class="score-number" id="score-number">0%</div>
+                    <div class="score-tag" id="score-label">EXPOSURE</div>
+                </div>
+            </div>
+            <div class="score-meta">
+                <div class="score-desc" id="score-desc"></div>
+                <div class="summary-chips" id="summary-row"></div>
+            </div>
+        </div>
 
+        <!-- Auto results -->
         <div id="auto-section" class="hidden">
-            <div class="section-label">✅ AUTO VERIFIED</div>
+            <div class="results-heading">
+                <span class="results-heading-line"></span>
+                <span>✅ AUTO VERIFIED</span>
+                <span class="results-heading-line"></span>
+            </div>
             <div class="results-grid" id="results-grid"></div>
         </div>
 
+        <!-- Manual results -->
         <div id="manual-section" class="hidden">
-            <hr class="divider">
-            <div class="section-label">🔎 SEARCH THESE PLATFORMS</div>
-            <div class="manual-note"><span>⚡ These are pre-built search links</span> — click each to see real results. Nothing here is auto-verified as a confirmed match.</div>
+            <div class="results-heading">
+                <span class="results-heading-line"></span>
+                <span>🔎 SEARCH THESE PLATFORMS</span>
+                <span class="results-heading-line"></span>
+            </div>
+            <p class="manual-note">Pre-built search links — click each to check for real matches. Not auto-verified.</p>
             <div class="manual-grid" id="manual-grid"></div>
         </div>
 
@@ -127,21 +236,31 @@
         </div>
     </div>
 
-    <div class="card history-card hidden" id="history-card">
-        <div class="section-label">🕓 RECENT SCANS</div>
+    <!-- History card -->
+    <div class="glass-card history-card hidden" id="history-card">
+        <div class="card-header-bar">
+            <span class="card-title-text">// RECENT SCANS</span>
+            <div class="card-dots"><span></span><span></span><span></span></div>
+        </div>
         <div class="history-list" id="history-list"></div>
         <div class="action-row">
             <button class="btn-secondary" id="clear-history-btn" type="button">CLEAR HISTORY</button>
         </div>
     </div>
 
-    <div class="footer">
-        Built with 🖤 by ashtid &nbsp;|&nbsp;
-        <a href="https://github.com/reboot-phoenix/ghosttrace" target="_blank" rel="noopener noreferrer">GitHub</a>
-        &nbsp;|&nbsp; <span>GhostTrace v2.0</span>
-        <br>
-        <span style="opacity:0.7;">No cookies used. "Recent scans" are stored only in your browser's local storage — never sent to a server.</span>
-    </div>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-line"></div>
+        <div class="footer-inner">
+            <span>Built with 🖤 by <strong>ashtid</strong></span>
+            <span class="footer-sep">|</span>
+            <a href="https://github.com/reboot-phoenix/ghosttrace" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+            <span class="footer-sep">|</span>
+            <span>GhostTrace v2.0</span>
+        </div>
+        <p class="footer-note">No cookies. Recent scans stored only in your browser's local storage — never sent to any server.</p>
+    </footer>
+
 </div>
 
 <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
