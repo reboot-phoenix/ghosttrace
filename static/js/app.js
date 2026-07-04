@@ -5,6 +5,10 @@
 let scanType = "name";
 let lastScanData = null;
 
+// Shows the tab-switch input-rule hint only once per tab, per page load,
+// so it doesn't fire an alert() every single time you click the tab.
+const hintsShown = { phone: false, email: false };
+
 const HISTORY_KEY = "ghosttrace_history";
 const MAX_HISTORY = 6;
 
@@ -13,13 +17,23 @@ const MAX_HISTORY = 6;
 document.addEventListener("DOMContentLoaded", () => {
     renderHistory();
 
-    document.getElementById("query").addEventListener("keypress", (e) => {
-        if (e.key === "Enter") runScan();
+    document.getElementById("btn-name").addEventListener("click", () => setType("name"));
+
+    document.getElementById("btn-phone").addEventListener("click", () => {
+        setType("phone");
+        if (!hintsShown.phone) {
+            alert("📱 Enter numeric values only for the phone number.");
+            hintsShown.phone = true;
+        }
     });
 
-    document.getElementById("btn-name").addEventListener("click", () => setType("name"));
-    document.getElementById("btn-phone").addEventListener("click", () => setType("phone"));
-    document.getElementById("btn-email").addEventListener("click", () => setType("email"));
+    document.getElementById("btn-email").addEventListener("click", () => {
+        setType("email");
+        if (!hintsShown.email) {
+            alert("📧 Enter a valid email address — it must contain @ and a domain (e.g. name@example.com).");
+            hintsShown.email = true;
+        }
+    });
     document.querySelector(".scan-btn").addEventListener("click", () => runScan());
 
     const exportBtn = document.getElementById("export-btn");
@@ -27,9 +41,118 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const clearBtn = document.getElementById("clear-history-btn");
     if (clearBtn) clearBtn.addEventListener("click", clearHistory);
+
+    // --- live input filtering (blocks invalid characters as you type) ---
+
+    const nameFirst = document.getElementById("name-first");
+    const nameMiddle = document.getElementById("name-middle");
+    const nameLast = document.getElementById("name-last");
+    const phoneNumber = document.getElementById("phone-number");
+    const emailInput = document.getElementById("email-input");
+
+    // Names: letters, spaces, hyphens, apostrophes only
+    [nameFirst, nameMiddle, nameLast].forEach(el => {
+        el.addEventListener("input", () => {
+            el.value = el.value.replace(/[^a-zA-Z\s'-]/g, "");
+        });
+        el.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
+    });
+
+    // Phone: digits only
+    phoneNumber.addEventListener("input", () => {
+        phoneNumber.value = phoneNumber.value.replace(/[^0-9]/g, "");
+    });
+    phoneNumber.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
+
+    // Email: restrict to characters valid in an email address
+    emailInput.addEventListener("input", () => {
+        emailInput.value = emailInput.value.replace(/[^a-zA-Z0-9@._%+\-]/g, "");
+    });
+    emailInput.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
+
+    // --- name filter attributes (college / location / company / job title) ---
+
+    document.getElementById("filter-select").addEventListener("change", (e) => {
+        const type = e.target.value;
+        if (!type) return;
+        addFilterTag(type);
+        e.target.value = "";
+    });
 });
 
+const FILTER_LABELS = {
+    college: "🎓 College / School",
+    location: "📍 Location",
+    company: "🏢 Company",
+    jobtitle: "💼 Job Title"
+};
+
+const FILTER_PLACEHOLDERS = {
+    college: "e.g. Techno India University",
+    location: "e.g. Kolkata, India",
+    company: "e.g. Tech Mahindra",
+    jobtitle: "e.g. Software Engineer"
+};
+
+function addFilterTag(type) {
+    if (document.querySelector(`.filter-tag[data-filter="${type}"]`)) return; // already added
+
+    const tag = document.createElement("div");
+    tag.className = "filter-tag";
+    tag.dataset.filter = type;
+    tag.innerHTML = `
+        <span class="filter-tag-label">${FILTER_LABELS[type]}</span>
+        <input type="text" class="filter-tag-input" placeholder="${FILTER_PLACEHOLDERS[type]}" autocomplete="off" spellcheck="false" />
+        <button type="button" class="filter-tag-remove" title="Remove">×</button>
+    `;
+
+    const input = tag.querySelector(".filter-tag-input");
+    input.addEventListener("input", () => {
+        input.value = input.value.replace(/"/g, ""); // strip quotes — would break query syntax
+    });
+    input.addEventListener("keypress", (e) => { if (e.key === "Enter") runScan(); });
+
+    tag.querySelector(".filter-tag-remove").addEventListener("click", () => {
+        tag.remove();
+        updateFilterSelectOptions();
+    });
+
+    document.getElementById("filter-tags").appendChild(tag);
+    updateFilterSelectOptions();
+    input.focus();
+}
+
+function updateFilterSelectOptions() {
+    const select = document.getElementById("filter-select");
+    const usedTypes = [...document.querySelectorAll(".filter-tag")].map(t => t.dataset.filter);
+    [...select.options].forEach(opt => {
+        if (!opt.value) return;
+        opt.disabled = usedTypes.includes(opt.value);
+    });
+}
+
+function getActiveFilters() {
+    return [...document.querySelectorAll(".filter-tag")]
+        .map(tag => document.querySelector(`.filter-tag[data-filter="${tag.dataset.filter}"] .filter-tag-input`).value.trim())
+        .filter(Boolean);
+}
+
+function clearFilterTags() {
+    document.getElementById("filter-tags").innerHTML = "";
+    updateFilterSelectOptions();
+}
+
 // ---------- type toggle ----------
+
+function clearAllInputs() {
+    document.getElementById("name-first").value = "";
+    document.getElementById("name-middle").value = "";
+    document.getElementById("name-last").value = "";
+    document.getElementById("phone-number").value = "";
+    document.getElementById("phone-country").selectedIndex = 0;
+    document.getElementById("email-input").value = "";
+    clearFilterTags();
+}
 
 function setType(type) {
     scanType = type;
@@ -37,22 +160,82 @@ function setType(type) {
     document.getElementById("btn-phone").classList.toggle("active", type === "phone");
     document.getElementById("btn-email").classList.toggle("active", type === "email");
 
-    const placeholders = {
-        name: "Enter full name to search...",
-        phone: "Enter phone number with country code (e.g. +91xxxxxxxxxx)...",
-        email: "Enter email address to check..."
-    };
-    document.getElementById("query").placeholder = placeholders[type];
+    document.getElementById("group-name").classList.toggle("hidden", type !== "name");
+    document.getElementById("group-phone").classList.toggle("hidden", type !== "phone");
+    document.getElementById("group-email").classList.toggle("hidden", type !== "email");
+
+    // Switching modes wipes whatever was typed elsewhere — no stale
+    // cross-field values sneaking into a scan of the wrong type.
+    clearAllInputs();
+
+    // Also clear any leftover results from a previous scan of a
+    // different type — a genuinely blank slate, not just blank inputs.
+    document.getElementById("results-card").classList.add("hidden");
+    lastScanData = null;
+
+    document.getElementById("status").textContent = "";
+}
+
+// ---------- validation ----------
+
+function getValidatedQuery() {
+    if (scanType === "name") {
+        const first = document.getElementById("name-first").value.trim();
+        const middle = document.getElementById("name-middle").value.trim();
+        const last = document.getElementById("name-last").value.trim();
+
+        if (!first || !last) {
+            alert("Please enter at least a first and last name.");
+            return null;
+        }
+
+        const fullName = [first, middle, last].filter(Boolean).join(" ");
+        const filters = getActiveFilters();
+
+        // Each phrase quoted separately so the search engine requires all
+        // of them to appear (not necessarily adjacent) — this is what
+        // actually narrows down common names, unlike one giant quoted blob.
+        const phrases = [`"${fullName}"`, ...filters.map(f => `"${f}"`)];
+        return phrases.join(" ");
+    }
+
+    if (scanType === "phone") {
+        const country = document.getElementById("phone-country").value;
+        const number = document.getElementById("phone-number").value.trim();
+
+        if (!/^[0-9]{6,14}$/.test(number)) {
+            alert("Please enter numeric values only — a valid phone number (6–14 digits).");
+            return null;
+        }
+        return country + number;
+    }
+
+    if (scanType === "email") {
+        const email = document.getElementById("email-input").value.trim();
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailPattern.test(email)) {
+            alert("Please enter a valid email address (must contain @ and a domain, e.g. name@example.com).");
+            return null;
+        }
+        return email;
+    }
+
+    return null;
 }
 
 // ---------- scan ----------
 
-async function runScan(prefill) {
-    const input = document.getElementById("query");
-    if (prefill) input.value = prefill;
+async function runScan(prefillQuery) {
+    let query;
 
-    const query = input.value.trim();
-    if (!query) return;
+    if (prefillQuery) {
+        // used by history re-run — trusted, already-validated past query
+        query = prefillQuery;
+    } else {
+        query = getValidatedQuery();
+        if (query === null) return; // alert already shown
+    }
 
     const btn = document.querySelector(".scan-btn");
     const status = document.getElementById("status");
