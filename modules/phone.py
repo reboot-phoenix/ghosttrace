@@ -1,138 +1,75 @@
+"""
+modules/phone.py — phone number scan
+"""
+
 import re
-import urllib.parse
 
-import requests
+from modules.search import web_search, build_result_entry
 
-from config import SERPAPI_KEY, SOCIAL_DOMAINS
+TIMEOUT = 12
 
-TIMEOUT = 10
-
-SEARCH_PROVIDERS = [
-    {
-        "name": "Truecaller",
-        "icon": "📞",
-        "url": "https://www.truecaller.com/search/in/{}"
-    },
-    {
-        "name": "Sync.me",
-        "icon": "👤",
-        "url": "https://sync.me/search/?number={}"
-    },
-    {
-        "name": "WhatsApp",
-        "icon": "💬",
-        "url": "https://wa.me/{}"
-    },
-    {
-        "name": "Telegram",
-        "icon": "✈️",
-        "url": "https://t.me/+{}"
-        # NOTE: only resolves if that user enabled phone-number discovery
-        # in their Telegram privacy settings — best-effort manual link.
-    },
+MANUAL_LINKS = [
+    {"name": "Truecaller",  "icon": "📞", "url": "https://www.truecaller.com/search/in/{}"},
+    {"name": "Sync.me",     "icon": "👤", "url": "https://sync.me/search/?number={}"},
+    {"name": "WhatsApp",    "icon": "💬", "url": "https://wa.me/{}"},
+    {"name": "Telegram",    "icon": "✈️",  "url": "https://t.me/+{}"},
 ]
 
+COUNTRY_CODES = {
+    "91": "India",  "1": "United States / Canada",
+    "44": "United Kingdom",   "81": "Japan",
+    "61": "Australia",        "971": "UAE",
+    "65": "Singapore",        "92": "Pakistan",
+    "880": "Bangladesh",      "977": "Nepal",
+    "94": "Sri Lanka",        "49": "Germany",
+    "33": "France",           "86": "China",
+    "7":  "Russia",           "55": "Brazil",
+    "27": "South Africa",     "234": "Nigeria",
+}
 
-def normalize_phone(phone):
+
+def normalize(phone: str) -> str:
     return re.sub(r"[^\d]", "", phone)
 
 
-def detect_country(phone):
-    if phone.startswith("91"):
-        return "India"
-    if phone.startswith("1"):
-        return "United States / Canada"
-    if phone.startswith("44"):
-        return "United Kingdom"
-    if phone.startswith("81"):
-        return "Japan"
-    if phone.startswith("61"):
-        return "Australia"
+def detect_country(phone: str) -> str:
+    for code in sorted(COUNTRY_CODES, key=len, reverse=True):
+        if phone.startswith(code):
+            return COUNTRY_CODES[code]
     return "Unknown"
 
 
-def _extract_domain(url):
-    try:
-        netloc = urllib.parse.urlparse(url).netloc.lower()
-        return netloc[4:] if netloc.startswith("www.") else netloc
-    except Exception:
-        return ""
+def check_phone(phone: str) -> tuple[list[dict], int, dict]:
+    cleaned = normalize(phone)
+    results: list[dict] = []
 
-
-def _serpapi_search(query, num=15):
-    params = {
-        "engine": "google",
-        "q": query,
-        "num": num,
-        "api_key": SERPAPI_KEY,
-    }
-    resp = requests.get("https://serpapi.com/search.json", params=params, timeout=TIMEOUT)
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get("error"):
-        raise RuntimeError(data["error"])
-    return data.get("organic_results", []) or []
-
-
-def check_phone(phone):
-
-    cleaned = normalize_phone(phone)
-    results = []
-
-    # 1. Real public search hits mentioning this exact number.
-    #    This is the honest ceiling here: it surfaces the number if it's
-    #    genuinely published somewhere public (a listing, a forum post,
-    #    a business card page). It cannot and will not attempt to probe
-    #    which private accounts (WhatsApp, Telegram, etc.) are registered
-    #    to this number — that requires enumerating auth/signup systems,
-    #    which this project deliberately does not do.
-    search_error = None
+    # Web search for public mentions of this number
+    organic, search_error = web_search(f'"{phone}" OR "{cleaned}"', num=15)
     found_count = 0
+    for item in organic:
+        results.append(build_result_entry(item))
+        found_count += 1
 
-    if SERPAPI_KEY:
-        try:
-            organic = _serpapi_search(f'"{phone}" OR "{cleaned}"', num=15)
-            for item in organic:
-                link = item.get("link")
-                title = item.get("title", "Result")
-                if not link:
-                    continue
-                domain = _extract_domain(link)
-                platform_label = SOCIAL_DOMAINS.get(domain)
-                results.append({
-                    "platform": platform_label if platform_label else title[:60],
-                    "icon": "🔗" if platform_label else "🌐",
-                    "url": link,
-                    "status": "found",
-                    "type": "auto"
-                })
-                found_count += 1
-        except (requests.RequestException, RuntimeError) as e:
-            search_error = str(e)[:150]
-
-    # 2. Quick manual lookup links — always included as a fallback path
-    for provider in SEARCH_PROVIDERS:
+    # Always include manual deep-links
+    for p in MANUAL_LINKS:
         results.append({
-            "platform": provider["name"],
-            "icon": provider["icon"],
-            "url": provider["url"].format(cleaned),
-            "status": "link",
-            "type": "manual"
+            "platform": p["name"],
+            "icon":     p["icon"],
+            "url":      p["url"].format(cleaned),
+            "status":   "link",
+            "type":     "manual",
         })
 
-    summary = {
-        "country": detect_country(cleaned),
-        "normalized": cleaned,
+    from config import SERPAPI_KEY
+    summary: dict = {
+        "country":        detect_country(cleaned),
+        "normalized":     cleaned,
         "public_mentions": found_count,
+        "search_engine":  "SerpAPI" if SERPAPI_KEY else "DuckDuckGo (free)",
+        "breach_note":    "HIBP does not support phone lookups (email only)",
     }
-
     if search_error:
-        summary["search_note"] = "Web search unavailable: " + search_error
-    elif not SERPAPI_KEY:
-        summary["search_note"] = "Web search not configured (SERPAPI_KEY missing)"
-
-    summary["breach_note"] = "HIBP does not support phone number lookups — email only"
+        summary["search_note"] = "Web search error: " + search_error
 
     score = min(100, found_count * 25)
-
     return results, score, summary
