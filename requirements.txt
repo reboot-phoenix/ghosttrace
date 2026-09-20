@@ -2,3 +2,11 @@ flask
 requests
 gunicorn
 ddgs
+
+# Layer 2: username search across 300+ platforms
+# https://github.com/sherlock-project/sherlock
+sherlock-project
+
+# Layer 2: email registration check across 120+ sites
+# https://github.com/megadose/holehe
+holehe

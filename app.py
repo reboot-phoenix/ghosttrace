@@ -11,13 +11,15 @@ app = Flask(__name__)
 # ----------------------------------------
 # Rate limiting (in-memory, per-IP)
 # ----------------------------------------
-# Protects the free SerpApi quota and prevents abuse. In-memory is fine
-# here because Render runs this app with a single worker process
-# (WEB_CONCURRENCY=1) — if that ever changes, this needs to move to
-# something shared like Redis.
+# In-memory is fine because Render runs this with a single worker
+# (WEB_CONCURRENCY=1). If that ever changes, swap _request_log for
+# a Redis-backed store (e.g. flask-limiter + redis://).
+# TODO: move to flask-limiter + Redis if scaling beyond 1 worker
 
 RATE_LIMIT_MAX = 15          # max scans
 RATE_LIMIT_WINDOW = 3600     # per hour (seconds)
+
+MAX_QUERY_LENGTH = 200        # reject absurdly long inputs early
 
 _request_log = defaultdict(deque)
 
@@ -71,13 +73,16 @@ def health():
 
 @app.route("/detect", methods=["POST"])
 def detect():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip()
 
     if not query:
+        return jsonify({"success": False, "error": "No input provided."}), 400
+
+    if len(query) > MAX_QUERY_LENGTH:
         return jsonify({
             "success": False,
-            "error": "No input provided."
+            "error": f"Input too long (max {MAX_QUERY_LENGTH} characters)."
         }), 400
 
     detected = detect_input(query)
@@ -93,6 +98,9 @@ def detect():
 # Scan
 # ----------------------------------------
 
+SUPPORTED_TYPES = {"name", "email", "phone", "username"}
+
+
 @app.route("/scan", methods=["POST"])
 def scan_api():
 
@@ -103,14 +111,16 @@ def scan_api():
         retry_after = int(RATE_LIMIT_WINDOW - (time.time() - oldest))
         response = jsonify({
             "success": False,
-            "error": f"Rate limit reached ({RATE_LIMIT_MAX} scans/hour). "
-                     f"Try again in about {max(retry_after // 60, 1)} minute(s)."
+            "error": (
+                f"Rate limit reached ({RATE_LIMIT_MAX} scans/hour). "
+                f"Try again in about {max(retry_after // 60, 1)} minute(s)."
+            )
         })
         response.status_code = 429
         response.headers["Retry-After"] = str(max(retry_after, 1))
         return response
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip()
     scan_type = data.get("type", "auto")
 
@@ -120,8 +130,24 @@ def scan_api():
             "error": "Please enter something to investigate."
         }), 400
 
+    if len(query) > MAX_QUERY_LENGTH:
+        return jsonify({
+            "success": False,
+            "error": f"Input too long (max {MAX_QUERY_LENGTH} characters)."
+        }), 400
+
     if scan_type == "auto":
         scan_type = detect_input(query)
+
+    # Reject types the scanner doesn't handle (ip, url, domain, hash_*, unknown)
+    if scan_type not in SUPPORTED_TYPES:
+        return jsonify({
+            "success": False,
+            "error": (
+                f"Cannot scan input type '{scan_type}'. "
+                f"Supported: {', '.join(sorted(SUPPORTED_TYPES))}."
+            )
+        }), 400
 
     try:
         results, score, summary = scan(scan_type, query)
@@ -157,4 +183,6 @@ def page_not_found(error):
 # ----------------------------------------
 
 if __name__ == "__main__":
+    # debug=True is fine locally; Render uses gunicorn (start command),
+    # so this block never runs in production.
     app.run(host="0.0.0.0", port=5000, debug=True)
