@@ -1,14 +1,25 @@
 """
 modules/email.py — email scan
+
+Three-layer approach:
+  Layer 1 (existing): Gravatar profile + avatar check
+  Layer 2 (existing): Breach check via LeakCheck / HIBP
+  Layer 3 (Holehe):   120+ site registration check (Twitter, Adobe, Discord, etc.)
+  Layer 4 (existing): Web search for public mentions
+  Layer 5 (existing): Manual deep-links (HIBP, Epieos, Hunter.io, etc.)
+
+Install Holehe for Layer 3:  pip install holehe
 """
 
 import hashlib
 import urllib.parse
+import concurrent.futures
 import requests
 
-from config import HIBP_API_KEY, LEAKCHECK_KEY
+from config import HIBP_API_KEY, LEAKCHECK_KEY, SERPAPI_KEY, GOOGLE_CSE_KEY
 from modules.breach import check_breaches
 from modules.search import web_search, build_result_entry
+from modules.holehe_runner import run_holehe
 
 TIMEOUT = 12
 
@@ -55,7 +66,7 @@ def _gravatar(email: str) -> tuple[list[dict], bool, str]:
                     "status": "found", "type": "auto",
                 })
                 for acc in entry.get("accounts") or []:
-                    label = acc.get("shortname") or acc.get("name") or "Linked Account"
+                    label   = acc.get("shortname") or acc.get("name") or "Linked Account"
                     acc_url = acc.get("url")
                     if acc_url:
                         results.append({
@@ -73,31 +84,15 @@ def _gravatar(email: str) -> tuple[list[dict], bool, str]:
             )
             results.append({
                 "platform": "Gravatar Avatar",
-                "icon": "🖼️",
-                "url": f"https://www.gravatar.com/avatar/{h}",
-                "status": "found" if r.status_code == 200 else "not_found",
-                "type": "auto",
+                "icon":     "🖼️",
+                "url":      f"https://www.gravatar.com/avatar/{h}",
+                "status":   "found" if r.status_code == 200 else "not_found",
+                "type":     "auto",
             })
         except requests.RequestException:
             pass
 
     return results, profile_found, h
-
-
-def _epieos(email: str) -> list[dict]:
-    """
-    Epieos is a free email OSINT tool — it finds Google account info,
-    YouTube channels, Google Maps reviews linked to an email.
-    We provide the deep-link so users can check it themselves.
-    """
-    encoded = urllib.parse.quote(email)
-    return [{
-        "platform": "Epieos — Google account OSINT",
-        "icon": "🕵️",
-        "url": f"https://epieos.com/?q={encoded}&t=email",
-        "status": "link",
-        "type": "manual",
-    }]
 
 
 def _manual_links(email: str, encoded: str) -> list[dict]:
@@ -136,20 +131,32 @@ def _manual_links(email: str, encoded: str) -> list[dict]:
 
 
 def check_email(email: str) -> tuple[list[dict], int, dict]:
-    email = email.strip()
+    email   = email.strip()
     encoded = urllib.parse.quote(email)
     results: list[dict] = []
 
-    # 1. Disposable email check
     disposable = _is_disposable(email)
 
-    # 2. Gravatar
-    gravatar_results, profile_found, _ = _gravatar(email)
+    # Run Gravatar, Holehe, breach check, and web search in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        f_gravatar = executor.submit(_gravatar, email)
+        f_holehe   = executor.submit(run_holehe, email)
+        f_breach   = executor.submit(check_breaches, email)
+        f_search   = executor.submit(web_search, f'"{email}"', 10)
+
+        gravatar_results, profile_found, _ = f_gravatar.result()
+        holehe_results, holehe_error       = f_holehe.result()
+        breach_names, breach_source, breach_error = f_breach.result()
+        search_results, search_error       = f_search.result()
+
+    # 1. Gravatar
     results.extend(gravatar_results)
 
-    # 3. Breach check
-    breach_names, breach_source, breach_error = check_breaches(email)
+    # 2. Holehe — registered accounts (120+ sites)
+    if holehe_results:
+        results.extend(holehe_results)
 
+    # 3. Breach check
     if breach_names is not None:
         if breach_names:
             preview = ", ".join(breach_names[:5])
@@ -157,19 +164,18 @@ def check_email(email: str) -> tuple[list[dict], int, dict]:
             results.append({
                 "platform": f"⚠️ Found in {len(breach_names)} breach(es): {preview}{suffix}",
                 "icon": "🛡️",
-                "url": f"https://haveibeenpwned.com/account/{encoded}",
+                "url":  f"https://haveibeenpwned.com/account/{encoded}",
                 "status": "found", "type": "auto",
             })
         else:
             results.append({
                 "platform": "✅ No known breaches found",
                 "icon": "🛡️",
-                "url": f"https://haveibeenpwned.com/account/{encoded}",
+                "url":  f"https://haveibeenpwned.com/account/{encoded}",
                 "status": "not_found", "type": "auto",
             })
 
     # 4. Web search
-    search_results, search_error = web_search(f'"{email}"', num=10)
     found_count = 0
     for item in search_results:
         results.append(build_result_entry(item))
@@ -178,15 +184,15 @@ def check_email(email: str) -> tuple[list[dict], int, dict]:
     # 5. Manual deep-links
     results.extend(_manual_links(email, encoded))
 
-    from config import SERPAPI_KEY, GOOGLE_CSE_KEY
     engine = "SerpAPI" if SERPAPI_KEY else ("Google CSE" if GOOGLE_CSE_KEY else "DuckDuckGo")
 
     summary: dict = {
-        "gravatar_profile": "Found ✅" if profile_found else "Not found",
-        "disposable_email": "⚠️ YES — throwaway domain" if disposable else "No",
-        "public_mentions":  found_count,
-        "breach_source":    breach_source,
-        "search_engine":    engine,
+        "gravatar_profile":     "Found ✅" if profile_found else "Not found",
+        "disposable_email":     "⚠️ YES — throwaway domain" if disposable else "No",
+        "registered_accounts":  len(holehe_results),
+        "public_mentions":      found_count,
+        "breach_source":        breach_source,
+        "search_engine":        engine,
     }
     if breach_names is not None:
         summary["breaches_found"] = len(breach_names)
@@ -194,9 +200,16 @@ def check_email(email: str) -> tuple[list[dict], int, dict]:
         summary["breach_note"] = breach_error
     if search_error:
         summary["search_note"] = search_error
+    if holehe_error:
+        summary["holehe_note"] = holehe_error
+    elif holehe_results:
+        summary["holehe_note"] = f"Found registered on {len(holehe_results)} site(s) via Holehe"
+    else:
+        summary["holehe_note"] = "Holehe: no registrations found (or not installed)"
 
     score = min(100,
-        found_count * 15
+        found_count * 10
+        + len(holehe_results) * 5
         + (20 if breach_names else 0)
         + (15 if profile_found else 0)
         + (10 if disposable else 0)
