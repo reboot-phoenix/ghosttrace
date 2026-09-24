@@ -1,188 +1,131 @@
+"""
+app.py — GhostTrace v3 Flask application
+
+Routes:
+  GET  /              → index.html
+  GET  /health        → status
+  POST /detect        → input type detection
+  POST /scan          → OSINT scan (main)
+  GET  /ping          → keep-alive for free hosting
+
+Rate limit: 20 scans/hour per IP (in-memory, resets on restart)
+Note: swap to Redis-backed flask-limiter if scaling to multi-worker
+"""
+
+from __future__ import annotations
 import time
+import json
 from collections import defaultdict, deque
+from functools import wraps
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
-from checker import scan
-from detector import detect_input
+from detector import detect_input, SUPPORTED_TYPES
+from modules.email import scan_email
+from modules.username import scan_username
+from modules.phone import scan_phone
+from modules.name import scan_name
+from modules.ip_domain import scan_ip, scan_domain
+from config import RATE_LIMIT_MAX, RATE_LIMIT_WINDOW
 
 app = Flask(__name__)
 
-# ----------------------------------------
-# Rate limiting (in-memory, per-IP)
-# ----------------------------------------
-# In-memory is fine because Render runs this with a single worker
-# (WEB_CONCURRENCY=1). If that ever changes, swap _request_log for
-# a Redis-backed store (e.g. flask-limiter + redis://).
-# TODO: move to flask-limiter + Redis if scaling beyond 1 worker
+# ── In-memory rate limiter ────────────────────────────────────────────────────
+_rate_store: dict[str, deque] = defaultdict(deque)
 
-RATE_LIMIT_MAX = 15          # max scans
-RATE_LIMIT_WINDOW = 3600     # per hour (seconds)
-
-MAX_QUERY_LENGTH = 200        # reject absurdly long inputs early
-
-_request_log = defaultdict(deque)
-
-
-def _client_ip():
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.remote_addr or "unknown"
-
-
-def is_rate_limited(ip):
+def _is_rate_limited(ip: str) -> bool:
     now = time.time()
-    log = _request_log[ip]
-
-    while log and now - log[0] > RATE_LIMIT_WINDOW:
-        log.popleft()
-
-    if len(log) >= RATE_LIMIT_MAX:
-        return True, log[0]
-
-    log.append(now)
-    return False, None
+    dq  = _rate_store[ip]
+    while dq and now - dq[0] > RATE_LIMIT_WINDOW:
+        dq.popleft()
+    if len(dq) >= RATE_LIMIT_MAX:
+        return True
+    dq.append(now)
+    return False
 
 
-# ----------------------------------------
-# Home
-# ----------------------------------------
+def rate_limited(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+        if _is_rate_limited(ip):
+            return jsonify({"error": "Rate limit: 20 scans/hour. Try again later."}), 429
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
-def home():
+def index():
     return render_template("index.html")
 
 
-# ----------------------------------------
-# Health Check
-# ----------------------------------------
-
 @app.route("/health")
 def health():
-    return jsonify({
-        "status": "online",
-        "service": "GhostTrace",
-        "version": "2.0"
-    })
+    return jsonify({"status": "online", "service": "GhostTrace", "version": "3.0"})
 
 
-# ----------------------------------------
-# Detect Input
-# ----------------------------------------
+@app.route("/ping")
+def ping():
+    """Keep-alive endpoint — call every 10 min from a cron to prevent cold starts."""
+    return "pong", 200
+
 
 @app.route("/detect", methods=["POST"])
 def detect():
-    data = request.get_json(silent=True) or {}
-    query = data.get("query", "").strip()
-
+    body = request.get_json(silent=True) or {}
+    query = (body.get("query") or "").strip()
     if not query:
-        return jsonify({"success": False, "error": "No input provided."}), 400
-
-    if len(query) > MAX_QUERY_LENGTH:
-        return jsonify({
-            "success": False,
-            "error": f"Input too long (max {MAX_QUERY_LENGTH} characters)."
-        }), 400
-
-    detected = detect_input(query)
-
+        return jsonify({"error": "No query provided"}), 400
+    kind = detect_input(query)
     return jsonify({
-        "success": True,
+        "type": kind,
+        "supported": kind in SUPPORTED_TYPES,
         "query": query,
-        "detected": detected
     })
 
 
-# ----------------------------------------
-# Scan
-# ----------------------------------------
-
-SUPPORTED_TYPES = {"name", "email", "phone", "username"}
-
-
 @app.route("/scan", methods=["POST"])
-def scan_api():
-
-    ip = _client_ip()
-    limited, oldest = is_rate_limited(ip)
-
-    if limited:
-        retry_after = int(RATE_LIMIT_WINDOW - (time.time() - oldest))
-        response = jsonify({
-            "success": False,
-            "error": (
-                f"Rate limit reached ({RATE_LIMIT_MAX} scans/hour). "
-                f"Try again in about {max(retry_after // 60, 1)} minute(s)."
-            )
-        })
-        response.status_code = 429
-        response.headers["Retry-After"] = str(max(retry_after, 1))
-        return response
-
-    data = request.get_json(silent=True) or {}
-    query = data.get("query", "").strip()
-    scan_type = data.get("type", "auto")
+@rate_limited
+def scan():
+    body = request.get_json(silent=True) or {}
+    query     = (body.get("query") or "").strip()
+    scan_type = (body.get("scan_type") or "").strip().lower()
+    filters   = body.get("filters", [])   # for name scan only
 
     if not query:
-        return jsonify({
-            "success": False,
-            "error": "Please enter something to investigate."
-        }), 400
+        return jsonify({"error": "No query provided"}), 400
 
-    if len(query) > MAX_QUERY_LENGTH:
-        return jsonify({
-            "success": False,
-            "error": f"Input too long (max {MAX_QUERY_LENGTH} characters)."
-        }), 400
-
-    if scan_type == "auto":
+    # Auto-detect type if not supplied
+    if not scan_type or scan_type == "auto":
         scan_type = detect_input(query)
 
-    # Reject types the scanner doesn't handle (ip, url, domain, hash_*, unknown)
     if scan_type not in SUPPORTED_TYPES:
-        return jsonify({
-            "success": False,
-            "error": (
-                f"Cannot scan input type '{scan_type}'. "
-                f"Supported: {', '.join(sorted(SUPPORTED_TYPES))}."
-            )
-        }), 400
+        return jsonify({"error": f"Unsupported type: {scan_type}. Supported: {sorted(SUPPORTED_TYPES)}"}), 400
 
     try:
-        results, score, summary = scan(scan_type, query)
-        return jsonify({
-            "success": True,
-            "query": query,
-            "type": scan_type,
-            "score": score,
-            "summary": summary,
-            "results": results
-        })
+        if scan_type == "email":
+            result = scan_email(query)
+        elif scan_type == "username":
+            result = scan_username(query)
+        elif scan_type == "phone":
+            result = scan_phone(query)
+        elif scan_type == "name":
+            result = scan_name(query, filters)
+        elif scan_type == "ip":
+            result = scan_ip(query)
+        elif scan_type == "domain":
+            result = scan_domain(query)
+        else:
+            return jsonify({"error": "Unknown scan type"}), 400
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"error": f"Scan error: {str(e)}"}), 500
 
+    result["scan_type"] = scan_type
+    result["timestamp"] = int(time.time())
+    return jsonify(result)
 
-# ----------------------------------------
-# 404
-# ----------------------------------------
-
-@app.errorhandler(404)
-def page_not_found(error):
-    return jsonify({
-        "success": False,
-        "error": "Endpoint not found."
-    }), 404
-
-
-# ----------------------------------------
-# Run
-# ----------------------------------------
 
 if __name__ == "__main__":
-    # debug=True is fine locally; Render uses gunicorn (start command),
-    # so this block never runs in production.
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True, port=5000)

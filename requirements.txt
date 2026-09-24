@@ -1,12 +1,8 @@
 flask
-requests
 gunicorn
+requests
+dnspython
+python-whois
 ddgs
-
-# Layer 2: username search across 300+ platforms
-# https://github.com/sherlock-project/sherlock
-sherlock-project
-
-# Layer 2: email registration check across 120+ sites
-# https://github.com/megadose/holehe
 holehe
+maigret

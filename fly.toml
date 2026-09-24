@@ -1,0 +1,38 @@
+# fly.toml — GhostTrace v3 on Fly.io free tier
+# Deploy: fly launch (first time) → fly deploy (updates)
+# Free tier: 3 shared-cpu-1x VMs, 256MB RAM each. Always on. No cold starts.
+# Sign up at https://fly.io — no credit card required for free tier
+
+app       = "ghosttrace"         # change to your unique app name
+primary_region = "bom"           # Mumbai — closest to India
+
+[build]
+  # Fly.io auto-detects Python via requirements.txt / Procfile
+  # No Dockerfile needed
+
+[env]
+  PORT = "8080"
+  # Optional — set in fly.io dashboard → Secrets:
+  # GOOGLE_CSE_KEY = "..."   (100 free searches/day)
+  # GOOGLE_CSE_ID  = "..."
+  # HIBP_API_KEY   = "..."   (optional, $3.50/mo)
+
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  auto_stop_machines  = false    # keep always-on (no cold starts)
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[checks]
+  [checks.health]
+    grace_period = "30s"
+    interval = "15s"
+    method = "get"
+    path = "/health"
+    timeout = "10s"

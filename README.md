@@ -1,104 +1,133 @@
-# 👻 GhostTrace
+# 👻 GhostTrace v3 — OSINT Intelligence Platform
 
-**Find out what the internet knows about you.**
-
-GhostTrace is an OSINT recon tool that scans names, emails, phone numbers, and usernames across the web to reveal your digital footprint — the same recon a real attacker or recruiter would do manually, automated and in front of you first.
-
-🔗 **Live app:** https://ghosttrace-iy8f.onrender.com/
-📦 **Repo:** https://github.com/reboot-phoenix/ghosttrace
+The best free OSINT tool you can self-host. Zero API keys required.
 
 ---
 
-## Demo
+## What it does
 
-> _Add a screenshot or GIF here — drag one into this file on GitHub_
-> `![GhostTrace demo](assets/demo.png)`
-
----
-
-## Features
-
-| Feature | Description |
-|---|---|
-| **Name scan** | Web search with optional filters (college, location, company, job title). Prioritises social hits (LinkedIn, GitHub, Reddit, etc.) |
-| **Email scan** | Gravatar profile check, breach database lookup, web search for public mentions, deep-links to HIBP / LeakCheck / Epieos / Hunter.io |
-| **Phone scan** | Country detection, web search mentions, direct lookup links (Truecaller, Sync.me, NumLookup, WhatsApp, Telegram) |
-| **Username scan** | Cross-platform username presence check |
-| **Exposure score** | 0–100% score with a live animated ring |
-| **Scan history** | Last 6 scans stored locally in your browser |
-| **Export report** | Download a plain-text investigation summary |
+| Scan type | What it checks | Cost |
+|-----------|---------------|------|
+| **Username** | 3,100+ platforms via Maigret + 35 native APIs (GitHub, Reddit, GitLab, npm, PyPI, Chess.com, Lichess, Codeforces, Duolingo, Last.fm…) | Free |
+| **Email** | Breach data (LeakCheck public) · Holehe 120+ sites · GitHub commit search (reveals real name) · Gravatar profile · EmailRep reputation | Free |
+| **IP Address** | Geo + ISP (ip-api.com) · Shodan InternetDB (ports, CVEs) · RDAP/WHOIS | Free |
+| **Domain** | DNS records · WHOIS/RDAP · crt.sh subdomains · Shodan · Geolocation of IP | Free |
+| **Phone** | Country/carrier detection · Format variants · Web search · 9 deep-links | Free |
+| **Name** | 14 Google dork queries · Social platform search links · Web results | Free |
 
 ---
 
-## Tech Stack
-
-| Layer | Tech |
-|---|---|
-| Backend | Python, Flask, Gunicorn |
-| Search | SerpAPI → Google CSE → DuckDuckGo (fallback chain) |
-| Breaches | LeakCheck Public API (free) + HIBP |
-| Frontend | Vanilla HTML / CSS / JS |
-| Hosting | Render.com (free tier) |
-
----
-
-## Running Locally
+## Setup (local)
 
 ```bash
-git clone https://github.com/reboot-phoenix/ghosttrace.git
+git clone https://github.com/yourusername/ghosttrace.git
 cd ghosttrace
 pip install -r requirements.txt
 python app.py
+# → http://localhost:5000
 ```
 
-Open `http://localhost:5000`.
-
-### Optional environment variables
-
-| Variable | Purpose |
-|---|---|
-| `GOOGLE_CSE_KEY` | Google API key (100 free queries/day — recommended) |
-| `GOOGLE_CSE_ID` | Programmable Search Engine ID |
-| `SERPAPI_KEY` | SerpAPI key (100 free searches/month) |
-| `HIBP_API_KEY` | HIBP paid key ($3.50/mo) |
-
-Create a `.env` file in the repo root or export them in your shell. The app degrades gracefully without them — DuckDuckGo is used as a fallback.
-
 ---
 
-## API Reference
+## Deployment (free, no credit card)
 
-### `POST /detect`
-Auto-detects input type.
-```json
-{ "query": "user@example.com" }
+### Option 1: Fly.io (BEST — always on, no cold starts)
+
+```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Login / sign up (no card needed for free tier)
+fly auth login
+
+# First deploy
+fly launch         # picks up fly.toml automatically
+fly deploy
+
+# Your app lives at https://ghosttrace.fly.dev
 ```
-Returns: `{ "detected": "email", ... }`
 
-### `POST /scan`
-Runs a scan. `type` can be `auto`, `name`, `email`, `phone`, or `username`.
-```json
-{ "query": "Ashtid D.", "type": "name" }
-```
-Returns: `{ "score": 42, "summary": "...", "results": [...] }`
+The free tier gives you 3 shared VMs, 256 MB RAM, globally distributed.
+**No cold starts** — your app stays running 24/7.
 
-Rate limit: **15 scans / hour per IP**.
+### Option 2: Koyeb (also good, no card for free tier)
 
-### `GET /health`
-Returns service status and version.
+1. Go to https://app.koyeb.com → New Service → GitHub
+2. Connect this repo
+3. Build command: `pip install -r requirements.txt`
+4. Start command: `gunicorn app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT`
+5. Deploy
+
+Note: Koyeb free tier scales to zero after 1 hour of inactivity (cold start ~10s).
+
+### Option 3: Render (what you used before)
+
+Same as before — renders.yaml works. Cold start after 15 min idle.
+
+### Why NOT Cloudflare Workers/Pages for the backend
+
+Cloudflare Workers run JavaScript only, with a 10ms CPU limit.
+Maigret and Holehe are Python subprocesses. They cannot run on Cloudflare.
+You can use Cloudflare Pages for a pure static frontend (no backend), but
+that means losing Maigret, Holehe, and all the server-side logic.
 
 ---
 
-## ⚠️ Ethical Use
+## Optional: Free Search API
 
-GhostTrace only aggregates publicly accessible information. Use it to audit **your own** footprint, or accounts you have explicit permission to investigate. Do not use it to stalk, harass, or deanonymize people without consent.
+Without any key, the app uses DuckDuckGo (free, may be blocked on cloud IPs).
+
+For better search results (100 queries/day, completely free, no card):
+
+1. Go to https://programmablesearchengine.google.com
+2. Create a new search engine → set it to search the whole web
+3. Get your Search Engine ID (cx)
+4. Go to https://console.cloud.google.com → Enable "Custom Search API"
+5. Create an API key
+6. Set as environment variables:
+   - `GOOGLE_CSE_KEY=your_key`
+   - `GOOGLE_CSE_ID=your_cx`
+
+On Fly.io: `fly secrets set GOOGLE_CSE_KEY=xxx GOOGLE_CSE_ID=yyy`
+On Koyeb: set in dashboard → Environment Variables
+On Render: set in dashboard → Environment
 
 ---
 
-## License
+## Tech stack
 
-MIT — see [LICENSE](LICENSE).
+| Component | What | Cost |
+|-----------|------|------|
+| Flask | Web framework | Free |
+| Maigret | 3,100+ site username search | Free |
+| Holehe | 120+ site email check | Free |
+| ip-api.com | IP geolocation | Free (45 req/min) |
+| Shodan InternetDB | Ports + CVEs for any IP | Free (no key) |
+| crt.sh | SSL cert transparency → subdomains | Free |
+| Cloudflare DoH | DNS records | Free |
+| RDAP | Modern WHOIS | Free |
+| LeakCheck public | Breach data | Free |
+| EmailRep.io | Email reputation | Free |
+| GitHub API | Commit author search | Free (unauthenticated) |
+| DuckDuckGo | Fallback web search | Free |
+| Google CSE | Web search (optional) | 100/day free |
+
+**Total: $0/month. Zero API keys required.**
 
 ---
 
-Built by **Ashtid D.** · BSc IT, Techno India University · [LinkedIn](https://linkedin.com/in/ashtid-d)
+## Environment variables (all optional)
+
+| Variable | What | Where to get |
+|----------|------|-------------|
+| `GOOGLE_CSE_KEY` | Google CSE API key | Google Cloud Console |
+| `GOOGLE_CSE_ID`  | Google CSE engine ID | programmablesearchengine.google.com |
+| `HIBP_API_KEY`   | Have I Been Pwned key | haveibeenpwned.com/API — $3.50/mo |
+| `LEAKCHECK_KEY`  | LeakCheck paid key | leakcheck.io |
+
+---
+
+## Credit
+
+Built by Ashtid D. — BSc IT, Techno India University
+Powered by: Maigret · Holehe · Shodan InternetDB · crt.sh · EmailRep · ip-api · RDAP
