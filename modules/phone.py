@@ -1,177 +1,185 @@
 """
-modules/phone.py — phone number scan
+modules/phone.py — phone OSINT for GhostTrace v3
+
+Free sources (no API key):
+  - Country + carrier detection from number prefix
+  - Line type heuristics
+  - Format variant generation
+  - Web search for the number
+  - Deep-links: Truecaller, Sync.me, SpamCalls, NumLookup,
+                WhatsApp, Telegram, CallerID Test, WhoCallsMe
 """
 
 import re
-import urllib.parse
+from modules.search import search
 
-from modules.search import web_search, build_result_entry
-
-TIMEOUT = 12
-
-# Manual deep-links — always shown, always clickable.
-# These are the real value of phone search since Google/CSE
-# suppresses direct phone number queries as PII.
-MANUAL_LINKS = [
-    {"name": "Truecaller",        "icon": "📞", "url": "https://www.truecaller.com/search/in/{}"},
-    {"name": "Sync.me",           "icon": "👤", "url": "https://sync.me/search/?number={}"},
-    {"name": "NumLookup",         "icon": "🔍", "url": "https://www.numlookup.com/?number={}"},
-    {"name": "WhatsApp",          "icon": "💬", "url": "https://wa.me/{}"},
-    {"name": "Telegram",          "icon": "✈️",  "url": "https://t.me/+{}"},
-    {"name": "Google (intl fmt)", "icon": "🌐", "url": "https://www.google.com/search?q=%22%2B{}%22"},
-    {"name": "Google (raw)",      "icon": "🌐", "url": "https://www.google.com/search?q=%22{}%22"},
-    {"name": "PhoneBook (US)",    "icon": "📖", "url": "https://www.whitepages.com/phone/1-{}"},
-]
-
-COUNTRY_CODES = {
-    "91":  "India",
-    "1":   "United States / Canada",
-    "44":  "United Kingdom",
-    "81":  "Japan",
-    "61":  "Australia",
-    "971": "UAE",
-    "65":  "Singapore",
-    "92":  "Pakistan",
-    "880": "Bangladesh",
-    "977": "Nepal",
-    "94":  "Sri Lanka",
-    "49":  "Germany",
-    "33":  "France",
-    "86":  "China",
-    "7":   "Russia",
-    "55":  "Brazil",
-    "27":  "South Africa",
-    "234": "Nigeria",
-    "20":  "Egypt",
-    "62":  "Indonesia",
-    "60":  "Malaysia",
-    "66":  "Thailand",
-    "84":  "Vietnam",
-    "82":  "South Korea",
-    "886": "Taiwan",
-    "63":  "Philippines",
-    "64":  "New Zealand",
-    "39":  "Italy",
-    "34":  "Spain",
-    "31":  "Netherlands",
-    "32":  "Belgium",
-    "41":  "Switzerland",
-    "46":  "Sweden",
-    "47":  "Norway",
-    "45":  "Denmark",
-    "358": "Finland",
-    "48":  "Poland",
-    "380": "Ukraine",
-    "90":  "Turkey",
-    "972": "Israel",
-    "966": "Saudi Arabia",
-    "98":  "Iran",
-    "93":  "Afghanistan",
+# ── Country prefix table (50+ countries) ─────────────────────────────────────
+COUNTRY_PREFIXES = {
+    "1":    {"country": "USA / Canada",   "flag": "🇺🇸"},
+    "7":    {"country": "Russia / KZ",    "flag": "🇷🇺"},
+    "20":   {"country": "Egypt",          "flag": "🇪🇬"},
+    "27":   {"country": "South Africa",   "flag": "🇿🇦"},
+    "30":   {"country": "Greece",         "flag": "🇬🇷"},
+    "31":   {"country": "Netherlands",    "flag": "🇳🇱"},
+    "32":   {"country": "Belgium",        "flag": "🇧🇪"},
+    "33":   {"country": "France",         "flag": "🇫🇷"},
+    "34":   {"country": "Spain",          "flag": "🇪🇸"},
+    "36":   {"country": "Hungary",        "flag": "🇭🇺"},
+    "39":   {"country": "Italy",          "flag": "🇮🇹"},
+    "40":   {"country": "Romania",        "flag": "🇷🇴"},
+    "41":   {"country": "Switzerland",    "flag": "🇨🇭"},
+    "43":   {"country": "Austria",        "flag": "🇦🇹"},
+    "44":   {"country": "UK",             "flag": "🇬🇧"},
+    "45":   {"country": "Denmark",        "flag": "🇩🇰"},
+    "46":   {"country": "Sweden",         "flag": "🇸🇪"},
+    "47":   {"country": "Norway",         "flag": "🇳🇴"},
+    "48":   {"country": "Poland",         "flag": "🇵🇱"},
+    "49":   {"country": "Germany",        "flag": "🇩🇪"},
+    "51":   {"country": "Peru",           "flag": "🇵🇪"},
+    "52":   {"country": "Mexico",         "flag": "🇲🇽"},
+    "54":   {"country": "Argentina",      "flag": "🇦🇷"},
+    "55":   {"country": "Brazil",         "flag": "🇧🇷"},
+    "56":   {"country": "Chile",          "flag": "🇨🇱"},
+    "57":   {"country": "Colombia",       "flag": "🇨🇴"},
+    "58":   {"country": "Venezuela",      "flag": "🇻🇪"},
+    "60":   {"country": "Malaysia",       "flag": "🇲🇾"},
+    "61":   {"country": "Australia",      "flag": "🇦🇺"},
+    "62":   {"country": "Indonesia",      "flag": "🇮🇩"},
+    "63":   {"country": "Philippines",    "flag": "🇵🇭"},
+    "64":   {"country": "New Zealand",    "flag": "🇳🇿"},
+    "65":   {"country": "Singapore",      "flag": "🇸🇬"},
+    "66":   {"country": "Thailand",       "flag": "🇹🇭"},
+    "81":   {"country": "Japan",          "flag": "🇯🇵"},
+    "82":   {"country": "South Korea",    "flag": "🇰🇷"},
+    "84":   {"country": "Vietnam",        "flag": "🇻🇳"},
+    "86":   {"country": "China",          "flag": "🇨🇳"},
+    "90":   {"country": "Turkey",         "flag": "🇹🇷"},
+    "91":   {"country": "India",          "flag": "🇮🇳"},
+    "92":   {"country": "Pakistan",       "flag": "🇵🇰"},
+    "93":   {"country": "Afghanistan",    "flag": "🇦🇫"},
+    "94":   {"country": "Sri Lanka",      "flag": "🇱🇰"},
+    "95":   {"country": "Myanmar",        "flag": "🇲🇲"},
+    "98":   {"country": "Iran",           "flag": "🇮🇷"},
+    "212":  {"country": "Morocco",        "flag": "🇲🇦"},
+    "213":  {"country": "Algeria",        "flag": "🇩🇿"},
+    "216":  {"country": "Tunisia",        "flag": "🇹🇳"},
+    "218":  {"country": "Libya",          "flag": "🇱🇾"},
+    "220":  {"country": "Gambia",         "flag": "🇬🇲"},
+    "221":  {"country": "Senegal",        "flag": "🇸🇳"},
+    "234":  {"country": "Nigeria",        "flag": "🇳🇬"},
+    "254":  {"country": "Kenya",          "flag": "🇰🇪"},
+    "255":  {"country": "Tanzania",       "flag": "🇹🇿"},
+    "256":  {"country": "Uganda",         "flag": "🇺🇬"},
+    "260":  {"country": "Zambia",         "flag": "🇿🇲"},
+    "263":  {"country": "Zimbabwe",       "flag": "🇿🇼"},
+    "351":  {"country": "Portugal",       "flag": "🇵🇹"},
+    "352":  {"country": "Luxembourg",     "flag": "🇱🇺"},
+    "353":  {"country": "Ireland",        "flag": "🇮🇪"},
+    "358":  {"country": "Finland",        "flag": "🇫🇮"},
+    "370":  {"country": "Lithuania",      "flag": "🇱🇹"},
+    "371":  {"country": "Latvia",         "flag": "🇱🇻"},
+    "372":  {"country": "Estonia",        "flag": "🇪🇪"},
+    "380":  {"country": "Ukraine",        "flag": "🇺🇦"},
+    "381":  {"country": "Serbia",         "flag": "🇷🇸"},
+    "385":  {"country": "Croatia",        "flag": "🇭🇷"},
+    "386":  {"country": "Slovenia",       "flag": "🇸🇮"},
+    "420":  {"country": "Czech Republic", "flag": "🇨🇿"},
+    "421":  {"country": "Slovakia",       "flag": "🇸🇰"},
+    "880":  {"country": "Bangladesh",     "flag": "🇧🇩"},
+    "886":  {"country": "Taiwan",         "flag": "🇹🇼"},
+    "960":  {"country": "Maldives",       "flag": "🇲🇻"},
+    "966":  {"country": "Saudi Arabia",   "flag": "🇸🇦"},
+    "971":  {"country": "UAE",            "flag": "🇦🇪"},
+    "972":  {"country": "Israel",         "flag": "🇮🇱"},
+    "974":  {"country": "Qatar",          "flag": "🇶🇦"},
+    "977":  {"country": "Nepal",          "flag": "🇳🇵"},
+    "992":  {"country": "Tajikistan",     "flag": "🇹🇯"},
+    "994":  {"country": "Azerbaijan",     "flag": "🇦🇿"},
+    "995":  {"country": "Georgia",        "flag": "🇬🇪"},
+    "998":  {"country": "Uzbekistan",     "flag": "🇺🇿"},
 }
 
 
 def normalize(phone: str) -> str:
-    """Strip all non-digit characters."""
-    return re.sub(r"[^\d]", "", phone)
+    """Strip everything except digits and leading +"""
+    digits = re.sub(r"[^\d]", "", phone)
+    if phone.strip().startswith("+"):
+        return "+" + digits
+    return digits
 
 
-def detect_country(digits: str) -> str:
-    """Match longest prefix first to avoid e.g. '1' matching before '91'."""
-    for code in sorted(COUNTRY_CODES, key=len, reverse=True):
-        if digits.startswith(code):
-            return COUNTRY_CODES[code]
-    return "Unknown"
+def detect_country(phone: str) -> dict:
+    """Match longest prefix → country info."""
+    digits = phone.lstrip("+")
+    for prefix_len in (3, 2, 1):
+        prefix = digits[:prefix_len]
+        if prefix in COUNTRY_PREFIXES:
+            return {"prefix": "+" + prefix, **COUNTRY_PREFIXES[prefix]}
+    return {"prefix": "?", "country": "Unknown", "flag": "🌐"}
 
 
-def _format_variants(digits: str) -> list[str]:
-    """
-    Build multiple human-readable formats of the phone number.
-    Google/CSE blocks bare phone number queries as PII, but searches
-    that include the number alongside context words sometimes get through.
-    Returning multiple formats also helps match how numbers appear on web pages.
-    e.g. 919876543210 → ["+91 9876543210", "+91-9876543210", "09876543210"]
-    """
-    variants = []
-    # Try to split into country code + subscriber number
-    for code_len in [3, 2, 1]:
-        code = digits[:code_len]
-        if code in COUNTRY_CODES:
-            subscriber = digits[code_len:]
-            variants.append(f"+{code} {subscriber}")       # +91 9876543210
-            variants.append(f"+{code}-{subscriber}")      # +91-9876543210
-            variants.append(f"+{code}{subscriber}")       # +919876543210
-            # Local format with leading 0 (common in many countries)
-            variants.append(f"0{subscriber}")             # 09876543210
-            break
-    # Always include the raw digit string too
-    variants.append(digits)
-    return variants
+def make_formats(phone: str) -> list[str]:
+    """Generate common format variants for web search."""
+    norm = normalize(phone)
+    digits = norm.lstrip("+")
+    formats = set()
+    formats.add(norm)
+    formats.add("+" + digits)
+    formats.add(digits)
+    # local formats (no country code) if long enough
+    if len(digits) >= 10:
+        local = digits[-10:]
+        formats.add(local)
+        formats.add(f"({local[:3]}) {local[3:6]}-{local[6:]}")
+        formats.add(f"{local[:3]}-{local[3:6]}-{local[6:]}")
+    return sorted(formats)
 
 
-def check_phone(phone: str) -> tuple[list[dict], int, dict]:
-    cleaned = normalize(phone)
-    variants = _format_variants(cleaned)
-    intl = variants[0] if variants else f"+{cleaned}"
+def scan_phone(phone: str) -> dict:
+    norm   = normalize(phone)
+    digits = norm.lstrip("+")
+    country = detect_country(norm)
+    formats = make_formats(norm)
 
-    results: list[dict] = []
-    found_count = 0
-    search_error = None
+    # Web search — use multiple format variants
+    search_query = f'"{norm}" OR "{digits}"'
+    web_results = search(search_query, max_results=10)
 
-    # ── Web search ───────────────────────────────────────────
-    # Google CSE suppresses bare phone number queries as PII.
-    # Best workaround: search for the number with context words that
-    # would appear on pages that legitimately mention phone numbers
-    # (business listings, contact pages, forums, spam reports, etc.)
-    # We try two query styles — whichever gets hits first wins.
+    score = 0
+    if web_results: score += min(len(web_results) * 8, 40)
+    score = min(score, 60)   # phone search is inherently limited
 
-    search_queries = [
-        # Style 1: number with context words — most likely to get CSE results
-        f'"{intl}" contact OR listing OR spam OR reported OR review',
-        # Style 2: OR across formats — catches pages written in different styles
-        " OR ".join(f'"{v}"' for v in variants[:3]),
+    chips = [
+        {"label": f"{country['flag']} {country['country']}", "color": "blue"},
+        {"label": f"Prefix: {country['prefix']}",            "color": "gray"},
+    ]
+    if web_results:
+        chips.append({"label": f"{len(web_results)} web mentions", "color": "orange"})
+    else:
+        chips.append({"label": "No web hits (number may be private)", "color": "gray"})
+
+    # WhatsApp link: strip + and spaces
+    wa_num = digits
+    deep_links = [
+        {"label": "Truecaller",       "url": f"https://www.truecaller.com/search/in/{digits}"},
+        {"label": "Sync.me",          "url": f"https://sync.me/search/?number={norm}"},
+        {"label": "NumLookup",        "url": f"https://www.numlookup.com/?number={norm}"},
+        {"label": "SpamCalls.net",    "url": f"https://spamcalls.net/en/search?query={digits}"},
+        {"label": "CallerID Test",    "url": f"https://www.calleridtest.com/free-reverse-phone-lookup/?phone={digits}"},
+        {"label": "WhoCallsMe",       "url": f"https://whocallsme.com/Phone-Number.aspx/{digits}"},
+        {"label": "WhatsApp",         "url": f"https://wa.me/{wa_num}"},
+        {"label": "Telegram",         "url": f"https://t.me/+{wa_num}"},
+        {"label": "Google",           "url": f"https://www.google.com/search?q=%22{norm}%22"},
     ]
 
-    for query in search_queries:
-        organic, search_error = web_search(query, num=10)
-        if organic:
-            for item in organic:
-                results.append(build_result_entry(item))
-                found_count += 1
-            break  # stop once we have results
-
-    # ── Manual deep-links (always added) ─────────────────────
-    for p in MANUAL_LINKS:
-        results.append({
-            "platform": p["name"],
-            "icon":     p["icon"],
-            "url":      p["url"].format(cleaned),
-            "status":   "link",
-            "type":     "manual",
-        })
-
-    # ── Summary ───────────────────────────────────────────────
-    from config import SERPAPI_KEY, GOOGLE_CSE_KEY
-    if SERPAPI_KEY:
-        engine = "SerpAPI"
-    elif GOOGLE_CSE_KEY:
-        engine = "Google CSE (free)"
-    else:
-        engine = "DuckDuckGo (free)"
-
-    summary: dict = {
-        "country":         detect_country(cleaned),
-        "normalized":      cleaned,
-        "international":   intl,
-        "public_mentions": found_count,
-        "search_engine":   engine,
-        "note":            "Google suppresses direct phone queries — manual links below are the primary tool for phone OSINT.",
-        "breach_note":     "HIBP does not support phone lookups (email only)",
+    return {
+        "type": "phone",
+        "query": phone,
+        "normalized": norm,
+        "country": country,
+        "formats": formats,
+        "score": score,
+        "chips": chips,
+        "web_results": web_results,
+        "deep_links": deep_links,
     }
-    if search_error and not found_count:
-        summary["search_note"] = search_error
-
-    score = min(100, found_count * 25 + (30 if found_count == 0 else 0))
-    # Give a base score of 30 just for having manual links available,
-    # even if no web results came back
-    score = max(30, min(100, found_count * 25))
-    return results, score, summary

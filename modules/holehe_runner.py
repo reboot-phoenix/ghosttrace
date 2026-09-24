@@ -1,160 +1,63 @@
 """
-modules/holehe_runner.py
+modules/holehe_runner.py — run holehe as subprocess, parse output
 
-Runs Holehe (https://github.com/megadose/holehe) as a subprocess and
-parses its JSON output. Holehe checks whether an email is registered on
-120+ services (Twitter, Adobe, Amazon, Discord, Dropbox, etc.) without
-triggering breaches — it uses password-reset / account-exists probes.
-
-Install: pip install holehe
-Usage:   called by modules/email.py — do not call directly.
+Holehe checks 120+ sites to see if an email is registered
+by using password-reset probes (doesn't log in, doesn't alert).
+No API keys. Completely free.
 """
 
-import json
 import subprocess
-import sys
-from typing import Optional
+import re
 
 
-# Icons for well-known platforms returned by Holehe
-_ICONS: dict[str, str] = {
-    "twitter": "🐦", "adobe": "🎨", "amazon": "📦", "discord": "🎮",
-    "dropbox": "📁", "flickr": "📷", "github": "🐙", "imgur": "🖼️",
-    "instagram": "📸", "lastfm": "🎵", "linkedin": "💼", "netflix": "🎬",
-    "notion": "📝", "paypal": "💳", "pinterest": "📌", "protonmail": "🔒",
-    "quora": "❓", "reddit": "🤖", "shopify": "🛒", "signal": "🔐",
-    "skype": "📞", "slack": "💬", "snapchat": "👻", "spotify": "🎧",
-    "steam": "🎮", "tumblr": "🌀", "twitch": "🟣", "twitter": "🐦",
-    "yahoo": "🔵", "youtube": "▶️", "zoom": "📹", "wordpress": "📰",
-    "duolingo": "🦜", "soundcloud": "🎙️", "vimeo": "🎬",
-}
-
-
-def _icon(name: str) -> str:
-    return _ICONS.get(name.lower(), "🔗")
-
-
-def _holehe_available() -> bool:
-    """Return True if holehe is installed and runnable."""
+def run_holehe(email: str, timeout: int = 60) -> dict:
+    """
+    Returns {
+        found: [{site, url}],
+        not_found: [str],
+        errors: [str],
+        summary: str,
+        installed: bool
+    }
+    """
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "holehe", "--help"],
-            capture_output=True, timeout=10
+            ["holehe", "--only-used", "--no-color", email],
+            capture_output=True, text=True, timeout=timeout
         )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    try:
-        result = subprocess.run(
-            ["holehe", "--help"],
-            capture_output=True, timeout=10
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-
-
-def run_holehe(email: str, timeout: int = 120) -> tuple[list[dict], Optional[str]]:
-    """
-    Run Holehe against an email and return a list of result dicts
-    (matching the GhostTrace result format) and an optional error string.
-
-    Each result dict:
-        platform, icon, url, status ("found" | "not_found"), type ("auto")
-
-    Only "found" results are returned — sites where the email is NOT
-    registered are silently dropped to keep the UI clean.
-    """
-    if not _holehe_available():
-        return [], (
-            "Holehe not installed — run `pip install holehe` "
-            "then restart the app for 120+ site email checks."
-        )
-
-    cmd = [sys.executable, "-m", "holehe", "--json", "--only-used", email]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return [], f"Holehe timed out after {timeout}s."
+        output = result.stdout + result.stderr
+        return _parse(output, email)
     except FileNotFoundError:
-        # Fallback: try holehe directly as a script
-        try:
-            cmd[0] = "holehe"
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=timeout
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-            return [], f"Holehe error: {e}"
+        return {"found": [], "not_found": [], "errors": [], "summary": "Holehe not installed", "installed": False}
+    except subprocess.TimeoutExpired:
+        return {"found": [], "not_found": [], "errors": [], "summary": "Holehe timed out", "installed": True}
+    except Exception as e:
+        return {"found": [], "not_found": [], "errors": [str(e)], "summary": "Holehe error", "installed": True}
 
-    # Holehe --json writes JSON to stdout, one object per line or as array.
-    raw = proc.stdout.strip()
-    if not raw:
-        return [], None  # No hits — clean result
 
-    results: list[dict] = []
-    errors: list[str] = []
+def _parse(output: str, email: str) -> dict:
+    found = []
+    not_found = []
+    errors = []
 
-    # Holehe JSON output is a list of dicts:
-    # [{"name": "twitter", "domain": "twitter.com", "rateLimit": false,
-    #   "exists": true, "emailrecovery": null, "phoneNumber": null, "others": null}]
-    try:
-        # Try parsing as JSON array first
-        entries = json.loads(raw)
-        if not isinstance(entries, list):
-            entries = [entries]
-    except json.JSONDecodeError:
-        # Fallback: one JSON object per line
-        entries = []
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line or not line.startswith("{"):
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-
-    for entry in entries:
-        if not isinstance(entry, dict):
+    for line in output.splitlines():
+        line = line.strip()
+        # [+] Site (https://...)
+        m = re.match(r"\[\+\]\s+(\S+)(?:\s+\((https?://[^\)]+)\))?", line)
+        if m:
+            site = m.group(1)
+            url  = m.group(2) or f"https://{site.lower()}.com"
+            found.append({"site": site, "url": url})
             continue
-
-        if entry.get("rateLimit"):
-            errors.append(entry.get("name", "?"))
+        # [-] Site — not registered
+        m2 = re.match(r"\[\-\]\s+(\S+)", line)
+        if m2:
+            not_found.append(m2.group(1))
             continue
+        # [x] errors
+        m3 = re.match(r"\[x\]\s+(.+)", line)
+        if m3:
+            errors.append(m3.group(1))
 
-        if not entry.get("exists"):
-            continue  # not registered — skip
-
-        name   = entry.get("name", "Unknown")
-        domain = entry.get("domain", "")
-        url    = f"https://{domain}" if domain else f"https://www.google.com/search?q={name}"
-
-        result: dict = {
-            "platform": name.title(),
-            "icon":     _icon(name),
-            "url":      url,
-            "status":   "found",
-            "type":     "auto",
-            "avatar":   "",
-            "display_name": email,
-            "bio":      "",
-            "meta":     "📧 Email registered" + (
-                f" · 📞 {entry['phoneNumber']}" if entry.get("phoneNumber") else ""
-            ),
-        }
-        results.append(result)
-
-    error_msg = None
-    if errors:
-        error_msg = f"Rate-limited on: {', '.join(errors[:5])}" + (
-            f" (+{len(errors)-5} more)" if len(errors) > 5 else ""
-        )
-
-    # Sort alphabetically by platform name
-    results.sort(key=lambda r: r["platform"].lower())
-    return results, error_msg
+    summary = f"Found on {len(found)} sites" if found else "Not found on any checked site"
+    return {"found": found, "not_found": not_found, "errors": errors, "summary": summary, "installed": True}
