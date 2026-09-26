@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/reboot-phoenix/ghosttrace/main/static/css/ghost.svg" alt="GhostTrace" width="80" />
-
 # 👻 GhostTrace
 
 ### The most powerful free OSINT intelligence platform you can self-host.
