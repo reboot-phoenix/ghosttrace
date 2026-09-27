@@ -14,10 +14,13 @@ from config import GOOGLE_CSE_KEY, GOOGLE_CSE_ID
 
 def search(query: str, max_results: int = 10) -> list[dict]:
     """Return list of {title, link, snippet}. Never raises."""
-    results = _google_cse(query, max_results) if (GOOGLE_CSE_KEY and GOOGLE_CSE_ID) else []
-    if not results:
-        results = _ddg(query, max_results)
-    return results[:max_results]
+    try:
+        results = _google_cse(query, max_results) if (GOOGLE_CSE_KEY and GOOGLE_CSE_ID) else []
+        if not results:
+            results = _ddg(query, max_results)
+        return results[:max_results]
+    except Exception:
+        return []
 
 
 def _google_cse(query: str, n: int) -> list[dict]:
