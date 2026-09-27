@@ -18,7 +18,7 @@ _PATTERNS = [
     ("hash_md5",    r"^[a-fA-F0-9]{32}$"),
     ("hash_sha1",   r"^[a-fA-F0-9]{40}$"),
     ("hash_sha256", r"^[a-fA-F0-9]{64}$"),
-    ("username",    r"^[A-Za-z0-9][A-Za-z0-9._\-]{1,29}$"),
+    ("username",    r"^(?!.*\.[a-z]{2,}$)[A-Za-z0-9][A-Za-z0-9._\-]{1,29}$"),
 ]
 
 
