@@ -8,7 +8,7 @@ const HISTORY_KEY = 'gt3_history';
 // ── Tab switching ──────────────────────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.scan-form').forEach(f => f.classList.add('hidden'));
   document.getElementById('form-' + tab).classList.remove('hidden');
   clearError();
@@ -97,9 +97,8 @@ function showLoading(type) {
   const interval = setInterval(() => {
     if (i >= steps.length) { clearInterval(interval); return; }
     const div = document.createElement('div');
-    div.className = 'loading-step';
-    div.innerHTML = `<div class="step-dot"></div><span>${esc(steps[i])}</span>`;
-    if (i > 0) stepsEl.children[i-1]?.querySelector('.step-dot')?.classList.add('done');
+    div.className = 't-line';
+    div.innerHTML = `<span class="t-prompt">$</span><span>${esc(steps[i])}</span>`;
     stepsEl.appendChild(div);
     stepsEl.scrollTop = stepsEl.scrollHeight;
     i++;
@@ -501,7 +500,9 @@ function renderDeepLinks(links) {
 function animateScore(score) {
   const fill = document.getElementById('ring-fill');
   const valEl = document.getElementById('score-val');
-  const circumference = 327;
+  const circumference = 2 * Math.PI * 48; // r=48 → ~301.6
+  fill.setAttribute('stroke-dasharray', circumference);
+  fill.setAttribute('stroke-dashoffset', circumference);
   fill.className = 'ring-fill ' + (score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low');
   fill.style.strokeDashoffset = circumference - (circumference * score / 100);
   let current = 0;
@@ -575,7 +576,7 @@ function toggleTheme() {
   const curr = document.documentElement.dataset.theme;
   const next = curr === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  document.querySelector('.theme-toggle').textContent = next === 'dark' ? '☀️ Light mode' : '🌙 Dark mode';
+  document.querySelector('.theme-toggle').textContent = next === 'dark' ? '[ LIGHT ]' : '[ DARK ]';
   try { localStorage.setItem('gt3_theme', next); } catch {}
 }
 
@@ -615,7 +616,7 @@ document.addEventListener('keydown', e => {
     const theme = localStorage.getItem('gt3_theme');
     if (theme) {
       document.documentElement.dataset.theme = theme;
-      document.querySelector('.theme-toggle').textContent = theme === 'dark' ? '☀️ Light mode' : '🌙 Dark mode';
+      document.querySelector('.theme-toggle').textContent = theme === 'dark' ? '[ LIGHT ]' : '[ DARK ]';
     }
   } catch {}
   renderHistory();
