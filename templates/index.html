@@ -6,70 +6,76 @@
 <title>GhostTrace — OSINT Intelligence Platform</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
-<!-- ── Sidebar ──────────────────────────────────────────────────────────────── -->
+<!-- ── Sidebar ── -->
 <aside id="sidebar">
+
   <div class="sidebar-logo">
-    <span class="logo-ghost">👻</span>
+    <div class="logo-icon">👻</div>
     <div>
       <div class="logo-title">GhostTrace</div>
-      <div class="logo-sub">OSINT Intelligence v3</div>
+      <div class="logo-sub">OSINT · v3.0</div>
     </div>
   </div>
 
-  <nav class="scan-tabs">
-    <button class="tab-btn active" data-tab="name"     onclick="switchTab('name')">
-      <span class="tab-icon">👤</span><span>Name</span>
+  <!-- Scan type grid -->
+  <div class="scan-type-grid">
+    <button class="type-btn active" data-tab="name"     onclick="switchTab('name')">
+      <span class="type-icon">👤</span>
+      <span class="type-label">Name</span>
     </button>
-    <button class="tab-btn" data-tab="username"  onclick="switchTab('username')">
-      <span class="tab-icon">🔍</span><span>Username</span>
+    <button class="type-btn" data-tab="username"  onclick="switchTab('username')">
+      <span class="type-icon">🔍</span>
+      <span class="type-label">Username</span>
     </button>
-    <button class="tab-btn" data-tab="email"     onclick="switchTab('email')">
-      <span class="tab-icon">📧</span><span>Email</span>
+    <button class="type-btn" data-tab="email"     onclick="switchTab('email')">
+      <span class="type-icon">📧</span>
+      <span class="type-label">Email</span>
     </button>
-    <button class="tab-btn" data-tab="phone"     onclick="switchTab('phone')">
-      <span class="tab-icon">📱</span><span>Phone</span>
+    <button class="type-btn" data-tab="phone"     onclick="switchTab('phone')">
+      <span class="type-icon">📱</span>
+      <span class="type-label">Phone</span>
     </button>
-    <button class="tab-btn" data-tab="ip"        onclick="switchTab('ip')">
-      <span class="tab-icon">🌐</span><span>IP Address</span>
+    <button class="type-btn" data-tab="ip"        onclick="switchTab('ip')">
+      <span class="type-icon">🌐</span>
+      <span class="type-label">IP Addr</span>
     </button>
-    <button class="tab-btn" data-tab="domain"    onclick="switchTab('domain')">
-      <span class="tab-icon">🔗</span><span>Domain</span>
+    <button class="type-btn" data-tab="domain"    onclick="switchTab('domain')">
+      <span class="type-icon">🔗</span>
+      <span class="type-label">Domain</span>
     </button>
-  </nav>
+  </div>
 
+  <!-- Forms -->
   <div class="scan-form-area">
-    <!-- NAME -->
+
     <div id="form-name" class="scan-form">
       <label class="form-label">Full Name</label>
       <input id="input-name" class="input-main" type="text" placeholder="e.g. John Doe" autocomplete="off">
-      <label class="form-label mt">Context Filters <span class="optional">(optional)</span></label>
+      <label class="form-label">Context Filters <span style="opacity:.5;font-size:9px">(optional)</span></label>
       <div id="filter-tags" class="filter-tags"></div>
       <div class="filter-inputs">
-        <input id="filter-input" class="input-sm" type="text" placeholder="Add: city, company, college…" onkeydown="if(event.key==='Enter')addFilter()">
+        <input id="filter-input" class="input-sm" type="text" placeholder="city, company, college…" onkeydown="if(event.key==='Enter')addFilter()">
         <button class="btn-sm" onclick="addFilter()">+</button>
       </div>
     </div>
 
-    <!-- USERNAME -->
     <div id="form-username" class="scan-form hidden">
       <label class="form-label">Username / Handle</label>
       <input id="input-username" class="input-main" type="text" placeholder="e.g. johndoe99" autocomplete="off">
-      <div class="form-hint">Checks 3,100+ platforms via Maigret + 35 native API lookups</div>
+      <div class="form-hint">3,100+ platforms · Maigret · 35 native APIs</div>
     </div>
 
-    <!-- EMAIL -->
     <div id="form-email" class="scan-form hidden">
       <label class="form-label">Email Address</label>
       <input id="input-email" class="input-main" type="email" placeholder="e.g. user@example.com" autocomplete="off">
-      <div class="form-hint">Breach check · Holehe 120+ sites · GitHub commits · Gravatar · Reputation</div>
+      <div class="form-hint">Holehe · Breach · GitHub commits · Gravatar · Rep</div>
     </div>
 
-    <!-- PHONE -->
     <div id="form-phone" class="scan-form hidden">
       <label class="form-label">Phone Number</label>
       <div class="phone-row">
@@ -95,63 +101,99 @@
       </div>
     </div>
 
-    <!-- IP -->
     <div id="form-ip" class="scan-form hidden">
       <label class="form-label">IP Address (v4)</label>
       <input id="input-ip" class="input-main" type="text" placeholder="e.g. 1.1.1.1" autocomplete="off">
-      <div class="form-hint">Geo · ISP · Shodan ports + CVEs · RDAP · Proxy detection</div>
+      <div class="form-hint">Geo · ISP · Shodan ports + CVEs · RDAP · Proxy</div>
     </div>
 
-    <!-- DOMAIN -->
     <div id="form-domain" class="scan-form hidden">
       <label class="form-label">Domain / URL</label>
       <input id="input-domain" class="input-main" type="text" placeholder="e.g. example.com" autocomplete="off">
-      <div class="form-hint">WHOIS · DNS records · Subdomains via crt.sh · Shodan · Wayback</div>
+      <div class="form-hint">WHOIS · DNS · crt.sh subdomains · Shodan · Wayback</div>
     </div>
 
     <button id="scan-btn" class="btn-scan" onclick="runScan()">
-      <span id="btn-label">🔍 Run Scan</span>
+      <span id="btn-label">▶ EXECUTE SCAN</span>
     </button>
     <div id="error-msg" class="error-msg hidden"></div>
   </div>
 
+  <!-- History -->
   <div class="sidebar-history">
-    <div class="history-header">Recent Scans</div>
+    <div class="history-header">// recent operations</div>
     <div id="history-list"></div>
   </div>
 
   <div class="sidebar-footer">
-    <button class="theme-toggle" onclick="toggleTheme()">☀️ Light mode</button>
-    <div class="disclaimer">For authorized research only</div>
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">[ LIGHT ]</button>
+    <div class="disclaimer">// authorized use only</div>
   </div>
+
 </aside>
 
-<!-- ── Main content ──────────────────────────────────────────────────────────── -->
+<!-- ── Main ── -->
 <main id="main">
 
   <!-- Empty state -->
   <div id="empty-state">
-    <div class="empty-ghost">👻</div>
-    <h1 class="empty-title">GhostTrace</h1>
-    <p class="empty-sub">OSINT Intelligence Platform</p>
-    <div class="empty-features">
-      <div class="feat">🔍 Username → 3,100+ platforms (Maigret)</div>
-      <div class="feat">📧 Email → Breach · Holehe · GitHub · Gravatar</div>
-      <div class="feat">🌐 IP/Domain → Shodan · WHOIS · DNS · Subdomains</div>
-      <div class="feat">👤 Name → 14 Google dorks · Social deep-links</div>
-      <div class="feat">📱 Phone → Country · Carrier · Reverse lookup links</div>
-      <div class="feat">💀 $0 cost · Zero API keys required</div>
+    <div class="radar-wrap">
+      <!-- Radar SVG -->
+      <svg class="radar-svg" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- grid circles -->
+        <circle cx="90" cy="90" r="80" stroke="#1a2535" stroke-width="1"/>
+        <circle cx="90" cy="90" r="55" stroke="#1a2535" stroke-width="1"/>
+        <circle cx="90" cy="90" r="30" stroke="#1a2535" stroke-width="1"/>
+        <!-- crosshairs -->
+        <line x1="90" y1="10" x2="90" y2="170" stroke="#1a2535" stroke-width="1"/>
+        <line x1="10" y1="90" x2="170" y2="90" stroke="#1a2535" stroke-width="1"/>
+        <!-- sweep -->
+        <g class="radar-sweep">
+          <path d="M90 90 L90 10 A80 80 0 0 1 155 125 Z" fill="url(#sweep-grad)" opacity="0.4"/>
+          <line x1="90" y1="90" x2="90" y2="10" stroke="#00d4ff" stroke-width="1.5" opacity="0.8"/>
+        </g>
+        <defs>
+          <radialGradient id="sweep-grad" cx="0%" cy="0%" r="100%">
+            <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <!-- center dot -->
+        <circle cx="90" cy="90" r="3" fill="#00d4ff"/>
+      </svg>
+      <div class="radar-blip"></div>
+      <div class="radar-blip"></div>
+      <div class="radar-blip"></div>
+    </div>
+
+    <div>
+      <h1 class="empty-title">Ghost<span>Trace</span></h1>
+      <p class="empty-sub">// intelligence gathering platform</p>
+    </div>
+
+    <div class="empty-grid">
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span>Username search across <strong>3,100+ platforms</strong> via Maigret</span></div>
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span>Email: Holehe · breach data · GitHub commits · Gravatar</span></div>
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span>IP: Shodan InternetDB · geo · CVEs · proxy detection</span></div>
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span>Domain: WHOIS · DNS · crt.sh subdomains · Wayback</span></div>
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span>Name: 14 Google dorks · social platform deep-links</span></div>
+      <div class="empty-item"><span class="empty-item-icon">▸</span><span><strong>$0/month</strong> · zero API keys required · fully open source</span></div>
     </div>
   </div>
 
-  <!-- Loading state -->
+  <!-- Loading -->
   <div id="loading-state" class="hidden">
-    <div class="loader-container">
-      <div class="pulse-ring"></div>
-      <div class="loader-ghost">👻</div>
+    <div class="terminal-loader">
+      <div class="terminal-bar">
+        <div class="t-dot r"></div>
+        <div class="t-dot o"></div>
+        <div class="t-dot g"></div>
+        <span>ghosttrace — scan terminal</span>
+      </div>
+      <div class="terminal-body" id="loading-steps">
+        <div class="t-line"><span class="t-prompt">$</span><span>initialising scan engine...</span></div>
+      </div>
     </div>
-    <div id="loading-text" class="loading-text">Initialising scan…</div>
-    <div id="loading-steps" class="loading-steps"></div>
   </div>
 
   <!-- Results -->
@@ -163,27 +205,25 @@
         <div id="result-time" class="result-time"></div>
       </div>
       <div class="results-actions">
-        <button class="action-btn" onclick="copyReport()">📋 Copy</button>
-        <button class="action-btn" onclick="downloadReport()">⬇️ Export</button>
+        <button class="action-btn" onclick="copyReport()">[ COPY ]</button>
+        <button class="action-btn" onclick="downloadReport()">[ EXPORT ]</button>
       </div>
     </div>
 
-    <!-- Score row -->
     <div id="score-row" class="score-row">
       <div class="score-ring-wrap">
-        <svg class="score-ring" viewBox="0 0 120 120">
-          <circle class="ring-bg"    cx="60" cy="60" r="52"/>
-          <circle class="ring-fill"  cx="60" cy="60" r="52" id="ring-fill"/>
+        <svg class="score-ring" viewBox="0 0 110 110">
+          <circle class="ring-bg"   cx="55" cy="55" r="48"/>
+          <circle class="ring-fill" cx="55" cy="55" r="48" id="ring-fill"/>
         </svg>
         <div class="score-center">
-          <div id="score-val" class="score-val">0</div>
-          <div class="score-label">Exposure</div>
+          <div id="score-val" class="score-val">0%</div>
+          <div class="score-label">exposure</div>
         </div>
       </div>
       <div id="chips-area" class="chips-area"></div>
     </div>
 
-    <!-- Dynamic sections -->
     <div id="results-body"></div>
   </div>
 
