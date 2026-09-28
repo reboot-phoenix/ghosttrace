@@ -1,163 +1,105 @@
 """
 modules/name.py — name OSINT for GhostTrace v3
 
-Strategy: Instead of one weak search, generate targeted Google dork queries
-for each major platform + general dorks. Each dork is clickable and pre-built
-with the person's name. Also run a web search for auto-results.
-
-No API keys needed. Completely free.
+Runs ALL 14 dork searches in parallel and returns actual results
+for each platform — not just links, real data.
 """
 
+import concurrent.futures
 from modules.search import search
 from config import SOCIAL_DOMAINS
 
 
-def scan_name(name: str, filters: list[str] | None = None) -> dict:
-    """
-    name: "First Last"
-    filters: optional list of quoted context strings e.g. ["Kolkata", "Python Developer"]
-    """
-    name    = name.strip()
-    filters = filters or []
-    quoted  = f'"{name}"'
-    context = " ".join(f'"{f}"' for f in filters if f.strip())
-    base    = f"{quoted} {context}".strip()
+_DORK_DEFINITIONS = [
+    {"label": "LinkedIn profiles",        "icon": "💼", "key": "linkedin",  "query_tpl": '"{name}" site:linkedin.com/in'},
+    {"label": "GitHub profiles",          "icon": "🐙", "key": "github",    "query_tpl": '"{name}" site:github.com'},
+    {"label": "Twitter / X profiles",     "icon": "🐦", "key": "twitter",   "query_tpl": '"{name}" site:twitter.com OR site:x.com'},
+    {"label": "Instagram profiles",       "icon": "📸", "key": "instagram", "query_tpl": '"{name}" site:instagram.com'},
+    {"label": "Reddit posts / profile",   "icon": "🤖", "key": "reddit",    "query_tpl": '"{name}" site:reddit.com'},
+    {"label": "YouTube channel / videos", "icon": "▶️", "key": "youtube",   "query_tpl": '"{name}" site:youtube.com'},
+    {"label": "Medium articles",          "icon": "✍️", "key": "medium",    "query_tpl": '"{name}" site:medium.com'},
+    {"label": "News & press coverage",    "icon": "📰", "key": "news",      "query_tpl": '"{name}" news OR interview OR press OR article'},
+    {"label": "PDF documents",            "icon": "📄", "key": "pdf",       "query_tpl": '"{name}" filetype:pdf'},
+    {"label": "Email address discovery",  "icon": "📧", "key": "email",     "query_tpl": '"{name}" email OR contact "@"'},
+    {"label": "Phone number discovery",   "icon": "📱", "key": "phone",     "query_tpl": '"{name}" phone OR tel OR contact'},
+    {"label": "About / bio pages",        "icon": "👤", "key": "about",     "query_tpl": '"{name}" inurl:about OR inurl:bio OR inurl:profile'},
+    {"label": "Academic papers",          "icon": "🎓", "key": "academic",  "query_tpl": '"{name}" site:researchgate.net OR site:academia.edu OR site:scholar.google.com'},
+    {"label": "Images",                   "icon": "🖼️", "key": "images",    "query_tpl": '"{name}"'},
+]
 
-    # ── Generate dork set ────────────────────────────────────────────────────
-    dorks = _build_dorks(name, base)
 
-    # ── Run primary web search ───────────────────────────────────────────────
-    web_results = search(base, max_results=12)
-    social_hits = [r for r in web_results if any(d in r["link"] for d in SOCIAL_DOMAINS)]
-    general_hits = [r for r in web_results if r not in social_hits]
-
-    # ── Score ────────────────────────────────────────────────────────────────
-    score = min(len(social_hits) * 20 + len(general_hits) * 8, 100)
-
-    # ── Chips ────────────────────────────────────────────────────────────────
-    chips = []
-    if social_hits:   chips.append({"label": f"{len(social_hits)} social profiles", "color": "green"})
-    if general_hits:  chips.append({"label": f"{len(general_hits)} web mentions",   "color": "blue"})
-    if filters:       chips.append({"label": f"Filtered: {', '.join(filters[:2])}", "color": "gray"})
-    if not chips:     chips.append({"label": "No results found", "color": "gray"})
-
-    # ── Social deep-links ────────────────────────────────────────────────────
-    encoded = name.replace(" ", "%20")
-    encoded_plus = name.replace(" ", "+")
-    deep_links = [
-        {"label": "LinkedIn people search",   "url": f"https://www.linkedin.com/search/results/people/?keywords={encoded_plus}"},
-        {"label": "Facebook people search",   "url": f"https://www.facebook.com/search/people/?q={encoded_plus}"},
-        {"label": "X (Twitter) search",       "url": f"https://x.com/search?q=%22{encoded}%22&f=user"},
-        {"label": "Instagram (Google dork)",  "url": f"https://www.google.com/search?q=site%3Ainstagram.com+%22{encoded}%22"},
-        {"label": "TikTok (Google dork)",     "url": f"https://www.google.com/search?q=site%3Atiktok.com+%22{encoded}%22"},
-        {"label": "GitHub (Google dork)",     "url": f"https://www.google.com/search?q=site%3Agithub.com+%22{encoded}%22"},
-        {"label": "Medium (Google dork)",     "url": f"https://www.google.com/search?q=site%3Amedium.com+%22{encoded}%22"},
-        {"label": "Pipl people search",       "url": f"https://pipl.com/search/?q={encoded_plus}"},
-        {"label": "Spokeo",                   "url": f"https://www.spokeo.com/search?q={encoded_plus}"},
-        {"label": "That's Them",              "url": f"https://thatsthem.com/name/{name.replace(' ', '-').lower()}"},
-    ]
-
+def _run_dork(dork_def: dict, name: str, context: str) -> dict:
+    """Run a single dork search and return results."""
+    query = dork_def["query_tpl"].format(name=name)
+    if context:
+        query = f"{query} {context}"
+    results = search(query, max_results=5)
     return {
-        "type": "name",
-        "query": name,
-        "filters": filters,
-        "score": score,
-        "chips": chips,
-        "dorks": dorks,
-        "web_results": web_results,
-        "social_hits": social_hits,
-        "general_hits": general_hits,
-        "deep_links": deep_links,
+        "label":   dork_def["label"],
+        "icon":    dork_def["icon"],
+        "key":     dork_def["key"],
+        "query":   query,
+        "url":     f"https://www.google.com/search?q={query.replace(' ', '+')}",
+        "results": results,
+        "found":   len(results) > 0,
+        "count":   len(results),
     }
 
 
-def _build_dorks(name: str, base_query: str) -> list[dict]:
-    """Build 14 targeted Google dork queries."""
-    q = f'"{name}"'
-    dorks = [
-        {
-            "label": "LinkedIn profiles",
-            "query": f'{q} site:linkedin.com/in',
-            "url": f"https://www.google.com/search?q={q}+site%3Alinkedin.com%2Fin",
-            "icon": "💼",
-        },
-        {
-            "label": "GitHub profiles",
-            "query": f'{q} site:github.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Agithub.com",
-            "icon": "🐙",
-        },
-        {
-            "label": "Twitter/X profiles",
-            "query": f'{q} site:twitter.com OR site:x.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Atwitter.com+OR+site%3Ax.com",
-            "icon": "🐦",
-        },
-        {
-            "label": "Instagram profiles",
-            "query": f'{q} site:instagram.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Ainstagram.com",
-            "icon": "📸",
-        },
-        {
-            "label": "Medium articles",
-            "query": f'{q} site:medium.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Amedium.com",
-            "icon": "✍️",
-        },
-        {
-            "label": "Reddit posts/profile",
-            "query": f'{q} site:reddit.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Areddit.com",
-            "icon": "🤖",
-        },
-        {
-            "label": "News articles",
-            "query": f'{q} news interview OR article OR press',
-            "url": f"https://www.google.com/search?q={q}+news+interview+OR+article",
-            "icon": "📰",
-        },
-        {
-            "label": "PDF documents",
-            "query": f'{q} filetype:pdf',
-            "url": f"https://www.google.com/search?q={q}+filetype%3Apdf",
-            "icon": "📄",
-        },
-        {
-            "label": "Email address",
-            "query": f'{q} email OR contact "@"',
-            "url": f"https://www.google.com/search?q={q}+email+OR+contact+%22%40%22",
-            "icon": "📧",
-        },
-        {
-            "label": "Phone number",
-            "query": f'{q} phone OR contact OR tel',
-            "url": f"https://www.google.com/search?q={q}+phone+OR+contact+OR+tel",
-            "icon": "📱",
-        },
-        {
-            "label": "About / bio pages",
-            "query": f'{q} inurl:about OR inurl:bio OR inurl:profile',
-            "url": f"https://www.google.com/search?q={q}+inurl%3Aabout+OR+inurl%3Abio",
-            "icon": "👤",
-        },
-        {
-            "label": "YouTube videos / channel",
-            "query": f'{q} site:youtube.com',
-            "url": f"https://www.google.com/search?q={q}+site%3Ayoutube.com",
-            "icon": "▶️",
-        },
-        {
-            "label": "Academic / research papers",
-            "query": f'{q} site:researchgate.net OR site:scholar.google.com OR site:academia.edu',
-            "url": f"https://www.google.com/search?q={q}+site%3Aresearchgate.net+OR+site%3Aacademia.edu",
-            "icon": "🎓",
-        },
-        {
-            "label": "Images of this person",
-            "query": f'{q}',
-            "url": f"https://www.google.com/search?q={q}&tbm=isch",
-            "icon": "🖼️",
-        },
+def scan_name(name: str, filters: list[str] | None = None) -> dict:
+    name    = name.strip()
+    filters = filters or []
+    context = " ".join(f'"{f}"' for f in filters if f.strip())
+
+    # Run all 14 dork searches in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=14) as pool:
+        futures = [pool.submit(_run_dork, d, name, context) for d in _DORK_DEFINITIONS]
+        dork_results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    # Sort back to original order
+    order = {d["key"]: i for i, d in enumerate(_DORK_DEFINITIONS)}
+    dork_results.sort(key=lambda x: order.get(x["key"], 99))
+
+    # Flatten all results for scoring
+    all_results = []
+    for d in dork_results:
+        for r in d["results"]:
+            r["_source"] = d["key"]
+            all_results.append(r)
+
+    social_hits  = [r for r in all_results if any(dom in r["link"] for dom in SOCIAL_DOMAINS)]
+    general_hits = [r for r in all_results if r not in social_hits]
+    dorks_with_results = [d for d in dork_results if d["found"]]
+
+    score = min(len(social_hits) * 15 + len(general_hits) * 5 + len(dorks_with_results) * 3, 100)
+
+    chips = []
+    if social_hits:         chips.append({"label": f"{len(social_hits)} social profiles found",    "color": "green"})
+    if general_hits:        chips.append({"label": f"{len(general_hits)} web mentions",            "color": "blue"})
+    if dorks_with_results:  chips.append({"label": f"{len(dorks_with_results)}/14 platforms hit",  "color": "orange"})
+    if filters:             chips.append({"label": f"Context: {', '.join(filters[:2])}",           "color": "gray"})
+    if not chips:           chips.append({"label": "No results found",                             "color": "gray"})
+
+    encoded_plus = name.replace(" ", "+")
+    encoded      = name.replace(" ", "%20")
+    deep_links = [
+        {"label": "LinkedIn people search", "url": f"https://www.linkedin.com/search/results/people/?keywords={encoded_plus}"},
+        {"label": "Facebook people search", "url": f"https://www.facebook.com/search/people/?q={encoded_plus}"},
+        {"label": "X (Twitter) search",     "url": f"https://x.com/search?q=%22{encoded}%22&f=user"},
+        {"label": "Pipl",                   "url": f"https://pipl.com/search/?q={encoded_plus}"},
+        {"label": "Spokeo",                 "url": f"https://www.spokeo.com/search?q={encoded_plus}"},
+        {"label": "That's Them",            "url": f"https://thatsthem.com/name/{name.replace(' ','-').lower()}"},
     ]
-    return dorks
+
+    return {
+        "type":         "name",
+        "query":        name,
+        "filters":      filters,
+        "score":        score,
+        "chips":        chips,
+        "dork_results": dork_results,
+        "social_hits":  social_hits,
+        "general_hits": general_hits,
+        "all_results":  all_results,
+        "deep_links":   deep_links,
+    }
