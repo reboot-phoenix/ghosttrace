@@ -1,8 +1,8 @@
-flask
-gunicorn
-requests
-dnspython
-python-whois
-ddgs
-holehe
-maigret
+flask>=3.0,<4
+gunicorn>=21.2
+requests>=2.31
+dnspython>=2.4
+python-whois>=0.9
+ddgs>=6.0
+holehe>=1.61
+maigret>=0.5

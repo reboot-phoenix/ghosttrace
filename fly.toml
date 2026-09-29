@@ -16,6 +16,9 @@ primary_region = "bom"           # Mumbai — closest to India
   # GOOGLE_CSE_KEY = "..."   (100 free searches/day)
   # GOOGLE_CSE_ID  = "..."
   # HIBP_API_KEY   = "..."   (optional, $3.50/mo)
+  # ANTHROPIC_API_KEY = "..." (optional, enables AI brief)
+  # SCAN_SIGNING_KEY  = "..." (random string; keeps AI-brief signatures valid across restarts)
+  # TRUSTED_PROXIES   = "1"   (reverse-proxy hops in front of the app; used for rate limiting)
 
 [http_service]
   internal_port       = 8080

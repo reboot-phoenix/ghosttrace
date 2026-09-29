@@ -3,13 +3,13 @@
 # 👻 GhostTrace
 
 ### The most powerful free OSINT intelligence platform you can self-host.
-### Zero API keys. Zero cost. Zero compromises.
+### No API keys needed for scans. Free to self-host.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-ghosttrace.up.railway.app-7c6aff?style=for-the-badge&logo=railway)](https://ghosttrace.up.railway.app)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.x-black?style=for-the-badge&logo=flask)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Cost](https://img.shields.io/badge/Cost-%240%2Fmonth-brightgreen?style=for-the-badge)](/)
+
 
 **Built by Ashtid D. — BSc IT, Techno India University**
 
@@ -21,7 +21,7 @@
 
 GhostTrace is a full-stack OSINT (Open Source Intelligence) platform built for investigators, security researchers, and anyone who wants to audit their digital footprint. It aggregates data from **dozens of free public sources simultaneously** and presents everything in a clean, professional intelligence dashboard.
 
-No subscriptions. No paywalls. No API keys required out of the box.
+No subscriptions. No paywalls. Scans need no API keys out of the box (the optional AI brief needs an Anthropic key).
 
 ---
 
@@ -119,13 +119,13 @@ Runs **5 intelligence sources in parallel:**
 | **Google CSE** | Web search (better results) | ✅ Optional — 100/day free |
 | **HIBP** | Full breach detail | ✅ Optional — $3.50/mo |
 
-**Total monthly cost: $0.00**
+**Total cost for scans: $0.** The optional AI brief uses your own Anthropic API usage.
 
 ---
 
 ## 🚀 Deploy in 2 Minutes (Railway — Recommended)
 
-Railway is the easiest free host for this app. No credit card. No cold starts on the free tier.
+Railway is a simple host for this app. Free-tier limits and terms change, so check railway.app for current pricing.
 
 **1.** Go to 👉 [railway.app](https://railway.app) → **Login with GitHub**
 
@@ -169,6 +169,10 @@ All variables are optional. The app works perfectly with zero configuration.
 | `GOOGLE_CSE_ID` | Google Search Engine ID | [programmablesearchengine.google.com](https://programmablesearchengine.google.com) | Required alongside `GOOGLE_CSE_KEY` |
 | `HIBP_API_KEY` | Have I Been Pwned | [haveibeenpwned.com/API](https://haveibeenpwned.com/API/Key) | Full breach detail ($3.50/mo) |
 | `LEAKCHECK_KEY` | LeakCheck paid | [leakcheck.io](https://leakcheck.io) | More breach sources |
+| `ANTHROPIC_API_KEY` | AI intelligence brief | [console.anthropic.com](https://console.anthropic.com) | Enables the AI Brief tab |
+| `SCAN_SIGNING_KEY` | Random secret string | any long random value | Keeps AI-brief signatures valid across restarts |
+| `TRUSTED_PROXIES` | Reverse-proxy hops in front of the app (default `1`) | your host's docs | Correct client IPs for rate limiting; set `0` if not behind a proxy |
+| `FLASK_DEBUG` | `1` enables debug mode when running `python app.py` | — | Local development only, never in production |
 
 ### Setting variables on Railway:
 Service → **Variables** tab → **New Variable** → add key + value → Railway auto-redeploys.
@@ -185,7 +189,7 @@ Service → **Variables** tab → **New Variable** → add key + value → Railw
 
 ```
 ghosttrace/
-├── app.py                  # Flask server, rate limiter (20/hr), all routes
+├── app.py                  # Flask server, rate limiter (20 scans/hr, 10 briefs/hr), routes
 ├── config.py               # API keys, 500+ disposable domains, social map
 ├── detector.py             # Auto-detects email/phone/ip/domain/username/name
 ├── requirements.txt
@@ -201,7 +205,11 @@ ghosttrace/
 │   ├── username.py         # Username — 35 APIs + Maigret concurrent
 │   ├── phone.py            # Phone — country, formats, deep-links
 │   ├── name.py             # Name — 14 dorks + social links
-│   └── ip_domain.py        # IP/Domain — Shodan, RDAP, DNS, crt.sh
+│   ├── ip_domain.py        # IP/Domain — Shodan, RDAP, DNS, crt.sh
+│   ├── correlate.py        # Identity extraction + correlation pivots (deep)
+│   ├── social_pivot.py     # Deep mode — IG/FB/X/TikTok profile candidates + scoring
+│   ├── report.py           # Structured intelligence report
+│   └── ai_brief.py         # Optional AI brief (needs ANTHROPIC_API_KEY)
 │
 ├── templates/
 │   └── index.html          # Two-panel dashboard UI
@@ -214,8 +222,21 @@ ghosttrace/
 **Key decisions:**
 - Single Gunicorn worker (`--workers 1`) — Maigret/Holehe are subprocesses, multi-worker breaks them
 - `ThreadPoolExecutor` for concurrent I/O — email scan runs 5 sources simultaneously, username runs 35 native checks at once
-- In-memory rate limiter — 20 scans/hour per IP, resets on restart (swap to Redis if scaling)
-- No server-side storage — results never saved, history lives in browser `localStorage` only
+- In-memory rate limiter — 20 scans/hour and 10 AI briefs/hour per IP; client IP comes from `ProxyFix` (`TRUSTED_PROXIES`), not raw headers; resets on restart (swap to Redis if scaling)
+- `/brief` only accepts scan results the server signed (HMAC), so it can't be used as an open proxy to your Anthropic key
+- No server-side storage — results never saved, history lives in browser `localStorage` only (older history entries can't be re-briefed after a restart unless `SCAN_SIGNING_KEY` is set)
+
+---
+
+## 🔬 Fast vs Deep Mode
+
+| | Fast (default) | Deep |
+|---|---|---|
+| Scan + identity extraction | ✅ | ✅ |
+| Correlation pivots (extra lookups on discovered names, emails, repos) | ❌ | ✅ |
+| Social profile candidates (Instagram · Facebook · X · TikTok) | ❌ | ✅ |
+
+Deep mode builds candidate handles from evidence already in the scan (handles linked in found profiles, the searched username, the email local-part, name variants) and probes those platforms with Maigret. Every hit gets a score and a **PROBABLE** or **LINKED** label with reasons. Nothing is ever marked confirmed: a matching handle does not prove identity, so verify manually. Only public, unauthenticated checks are used: no logins, no account-recovery or contact-sync lookups.
 
 ---
 
