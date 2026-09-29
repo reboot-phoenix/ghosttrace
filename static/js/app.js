@@ -234,6 +234,19 @@ function renderFindingsTab(report, data) {
     }
   }
 
+  // Deep mode: social profile candidates (IG / FB / X / TikTok)
+  const social = report.social_candidates || [];
+  if (data.mode === 'deep') {
+    html += section('📱 SOCIAL PROFILE CANDIDATES', social.length
+      ? social.map(c => `
+          <div class="finding-row">
+            <div class="finding-conf"><span class="conf-badge ${CONFIDENCE_COLORS[c.confidence]||'gray'}">${CONFIDENCE_ICONS[c.confidence]||'?'} ${esc(c.confidence)}</span></div>
+            <div class="finding-desc"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.platform)} · @${esc(c.handle)}</a>${c.profile_name ? ' — ' + esc(c.profile_name) : ''}</div>
+            <div class="finding-evidence">📎 score ${esc(String(c.score))} · ${esc((c.reasons||[]).join('; '))} · ${esc(c.note)}</div>
+          </div>`).join('')
+      : '<div style="color:var(--text3);font-family:var(--mono);font-size:12px;padding:12px">No candidate profiles found from available evidence.</div>');
+  }
+
   // Add type-specific raw sections below findings
   html += renderTypeSections(data);
 
