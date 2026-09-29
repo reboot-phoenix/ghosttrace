@@ -10,7 +10,7 @@ Every field has a confidence label. No hallucination.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 CONFIDENCE_ICONS = {
@@ -67,7 +67,7 @@ def build_report(scan_result: dict, correlation: dict, scan_mode: str = "fast") 
 
     return {
         "report_id":       f"GT-{int(time.time())}",
-        "generated_at":    datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "generated_at":    datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
         "scan_type":       scan_type,
         "query":           query,
         "scan_mode":       scan_mode,
@@ -81,6 +81,7 @@ def build_report(scan_result: dict, correlation: dict, scan_mode: str = "fast") 
         "findings":        findings,
         "risk":            risk,
         "pivot_count":     len([p for p in pivots if p.get("data")]),
+        "social_candidates": correlation.get("social_candidates", []),
     }
 
 

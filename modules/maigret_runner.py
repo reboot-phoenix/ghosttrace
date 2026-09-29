@@ -18,7 +18,7 @@ import tempfile
 import re
 
 
-def run_maigret(username: str, timeout: int = 120, top_sites: int = 500) -> dict:
+def run_maigret(username: str, timeout: int = 120, top_sites: int = 500, sites: list[str] | None = None) -> dict:
     """
     Returns {
         found: [{site, url, category, name, bio, location}],
@@ -28,6 +28,7 @@ def run_maigret(username: str, timeout: int = 120, top_sites: int = 500) -> dict
         raw_tags: {}
     }
     top_sites: how many sites to check (default 500 = top 500 by traffic)
+    sites: optional explicit site names (e.g. ["Instagram", "Facebook"]); overrides top_sites
     Full scan (3100+) takes ~5 min; 500 is ~60s
     """
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -38,9 +39,13 @@ def run_maigret(username: str, timeout: int = 120, top_sites: int = 500) -> dict
                 "--json", report_path,
                 "--no-color",
                 "--timeout", "10",
-                "--top-sites", str(top_sites),
                 "--retries", "1",
             ]
+            if sites:
+                for site in sites:
+                    cmd += ["--site", site]
+            else:
+                cmd += ["--top-sites", str(top_sites)]
             subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             return _parse_json(report_path, username)
         except FileNotFoundError:

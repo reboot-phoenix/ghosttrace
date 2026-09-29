@@ -23,7 +23,7 @@ import concurrent.futures
 _T = 8  # timeout
 
 
-def correlate(scan_result: dict) -> dict:
+def correlate(scan_result: dict, deep: bool = False) -> dict:
     """
     Master correlation function.
     Takes any scan result, finds all pivot points,
@@ -34,8 +34,9 @@ def correlate(scan_result: dict) -> dict:
     pivots    = []
     identity  = _build_identity(scan_type, scan_result)
 
-    # Run pivots based on what we found
-    pivot_tasks = _plan_pivots(scan_type, scan_result, identity)
+    # Fast mode: identity extraction only (no extra network pivots).
+    # Deep mode: run pivots + social profile pivoting.
+    pivot_tasks = _plan_pivots(scan_type, scan_result, identity) if deep else []
 
     if pivot_tasks:
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
@@ -54,10 +55,19 @@ def correlate(scan_result: dict) -> dict:
     # Build confirmed findings list
     findings = _extract_findings(scan_type, scan_result, pivots, identity)
 
+    social = []
+    if deep:
+        from modules.social_pivot import find_social_profiles
+        try:
+            social = find_social_profiles(scan_type, scan_result, identity)
+        except Exception:
+            social = []
+
     return {
         "identity":  identity,
         "findings":  findings,
         "pivots":    pivots,
+        "social_candidates": social,
         "summary":   _build_summary(identity, findings),
     }
 
