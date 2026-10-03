@@ -163,6 +163,21 @@ def assess_domain(host: str, url: str | None = None, context: dict | None = None
     if url and re.search(r"https?://[^/]*@", url):
         s.append(_sig("userinfo_trick", 30, "Credentials-style '@' used to disguise the real host"))
 
+    # DEEP-mode page analysis (only present when the caller ran it)
+    if ctx.get("page"):
+        s.extend(assess_page(ctx["page"], reg))
+    fs = ctx.get("first_seen")          # earliest Wayback snapshot, ISO date
+    if ctx.get("page") is not None and "first_seen" in ctx:
+        if not fs:
+            s.append(_sig("never_archived", 8, "No history in the Wayback Machine (brand-new or obscure site)"))
+        else:
+            try:
+                age = (datetime.now(timezone.utc) - datetime.fromisoformat(fs).replace(tzinfo=timezone.utc)).days
+                if age < 90:
+                    s.append(_sig("recently_first_seen", 15, f"First archived only {age} days ago"))
+            except ValueError:
+                pass
+
     # enrichment-driven signals (only if caller supplied them)
     created = ctx.get("domain_created")  # ISO date string
     if created:
@@ -179,6 +194,40 @@ def assess_domain(host: str, url: str | None = None, context: dict | None = None
             pass
     if ctx.get("has_rdap") is False:
         s.append(_sig("no_whois", 8, "No public registration data found"))
+    return s
+
+
+def assess_page(page: dict, reg_domain: str) -> list[dict]:
+    """Signals from the fetched page (DEEP mode)."""
+    s: list[dict] = []
+    if page.get("error"):
+        return s
+    asks = sorted({a for f in page.get("forms", []) for a in f.get("asks_for", [])})
+    risky = [a for a in asks if a in ("OTP", "PIN", "CVV", "card number", "Aadhaar", "PAN",
+                                       "UPI details", "card expiry", "net-banking login")]
+    if risky:
+        s.append(_sig("collects_sensitive", 35, "Page asks for: " + ", ".join(risky)))
+    elif "password" in asks:
+        s.append(_sig("login_form", 12, "Page has a login form"))
+    foreign = {f["action_host"] for f in page.get("forms", [])
+               if f.get("asks_for") and f.get("action_host") and _registrable(f["action_host"]) != reg_domain}
+    if foreign:
+        s.append(_sig("form_posts_elsewhere", 30,
+                      "Form sends entered data to a different site: " + ", ".join(sorted(foreign)[:3])))
+    brands = page.get("brand_mentions") or []
+    if brands:
+        s.append(_sig("page_impersonates_brand", 40,
+                      "Page presents itself as " + ", ".join(brands[:3]) + " but is not that brand's domain"))
+    if page.get("cross_domain_redirect"):
+        s.append(_sig("redirects_away", 15, "Link redirects to a different site: " + page.get("final_url", "")[:80]))
+    if page.get("hidden_iframes"):
+        s.append(_sig("hidden_iframe", 15, f"{page['hidden_iframes']} hidden iframe(s)"))
+    if page.get("meta_refresh"):
+        s.append(_sig("meta_refresh", 8, "Page auto-redirects via meta refresh"))
+    if len(page.get("urgent_phrases", [])) >= 2:
+        s.append(_sig("urgency_language", 15, "Pressure language: " + ", ".join(page["urgent_phrases"][:3])))
+    if page.get("contact_links"):
+        s.append(_sig("chat_contact", 10, "Pushes you to WhatsApp/Telegram: " + ", ".join(page["contact_links"])))
     return s
 
 
@@ -242,6 +291,22 @@ def assess_email(email: str, context: dict | None = None) -> list[dict]:
     return s
 
 
+def assess_community(rep: dict | None, web: dict | None) -> list[dict]:
+    """Signals from user reports and web mentions (any indicator type)."""
+    s: list[dict] = []
+    n = (rep or {}).get("count", 0)
+    if n:
+        w = 10 if n == 1 else 25 if n == 2 else 45 if n < 5 else 65 if n < 10 else 85
+        top = max(rep["categories"], key=rep["categories"].get).replace("_", " ")
+        s.append(_sig("community_reports", w,
+                      f"{n} independent user report(s) in the last 6 months, mostly '{top}' (unverified)"))
+    h = (web or {}).get("hits", 0)
+    if h:
+        s.append(_sig("web_scam_mentions", min(15 + 10 * h, 45),
+                      f"{h} web result(s) mention this together with scam/fraud wording"))
+    return s
+
+
 # ── public entry ──────────────────────────────────────────────────────────────
 def assess(kind: str, query: str, context: dict | None = None) -> dict:
     q = query.strip()
@@ -258,4 +323,5 @@ def assess(kind: str, query: str, context: dict | None = None) -> dict:
         sigs = assess_email(q, context)
     else:
         return {"verdict": "not_applicable", "score": 0, "signals": [], "disclaimer": DISCLAIMER}
-    return _finish(sigs)
+    ctx = context or {}
+    return _finish(sigs + assess_community(ctx.get("reports"), ctx.get("web")))

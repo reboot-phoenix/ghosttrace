@@ -109,7 +109,22 @@ _CHECKS = (("OpenPhish", _check_openphish),
 
 def check(target: str) -> dict:
     hits, checked = [], []
+    local_labels: set[str] = set()
+    try:
+        from modules import feed_db
+        stats = feed_db.stats()
+        if stats:
+            local_labels = set(stats)
+            total = sum(stats.values())
+            checked.append(f"Local database ({total:,} known-bad hosts)")
+            for m in feed_db.lookup(target):
+                hits.append({"source": m["label"], "detail":
+                             f"Listed in {m['label']} (matched {m['via']})", "reference": ""})
+    except Exception:
+        pass
     for name, fn in _CHECKS:
+        if name in local_labels:        # already covered by the local database
+            continue
         if name == "URLhaus" and not os.environ.get("URLHAUS_AUTH_KEY"):
             continue
         if name == "Google Safe Browsing" and not os.environ.get("GOOGLE_SAFE_BROWSING_KEY"):

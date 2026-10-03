@@ -53,6 +53,7 @@ def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
     """GET with per-hop validation and a capped body. Returns a Response (body capped)."""
     headers = headers or {"User-Agent": "GhostTrace/3.1"}
     current = url
+    chain = [url]
     for _ in range(MAX_REDIRECTS + 1):
         validate_url(current)
         r = requests.get(current, timeout=timeout, headers=headers,
@@ -63,6 +64,7 @@ def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
             if not loc:
                 raise UnsafeURL("redirect without Location")
             current = urljoin(current, loc)
+            chain.append(current)
             continue
         body = b""
         for chunk in r.iter_content(8192):
@@ -71,5 +73,6 @@ def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
                 break
         r._content = body
         r.close()
+        r.chain = chain          # every URL visited, in order
         return r
     raise UnsafeURL("too many redirects")
