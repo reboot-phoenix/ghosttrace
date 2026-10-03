@@ -16,6 +16,7 @@ All free. Zero API keys.
 
 import concurrent.futures
 import re
+import os
 import requests
 from modules.maigret_runner import run_maigret
 
@@ -267,7 +268,10 @@ def _check_duolingo(u: str) -> dict | None:
 
 
 def _check_lastfm(u: str) -> dict | None:
-    r = _get(f"https://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={u}&api_key=f57e2b1afa5b6f13ef11a4e5f5b9218c&format=json")
+    key = os.environ.get("LASTFM_API_KEY", "").strip()
+    if not key:
+        return None   # optional: set LASTFM_API_KEY to enable
+    r = _get("https://ws.audioscrobbler.com/2.0/", params={"method": "user.getinfo", "user": u, "api_key": key, "format": "json"})
     if r and r.status_code == 200:
         user = r.json().get("user", {})
         if user:

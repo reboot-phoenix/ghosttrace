@@ -20,6 +20,8 @@ def run_holehe(email: str, timeout: int = 60) -> dict:
         installed: bool
     }
     """
+    if not email or email.startswith("-"):
+        return {"found": [], "not_found": [], "errors": [], "summary": "Invalid email", "installed": True}
     try:
         result = subprocess.run(
             ["holehe", "--only-used", "--no-color", email],

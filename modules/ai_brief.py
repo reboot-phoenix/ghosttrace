@@ -21,11 +21,9 @@ def generate_brief(scan_result: dict) -> dict:
     Returns {brief: str, generated: bool, error: str|None}
     """
     if not ANTHROPIC_API_KEY:
-        return {
-            "brief": None,
-            "generated": False,
-            "error": "ANTHROPIC_API_KEY not set"
-        }
+        # Free mode: build the brief from the scan's own evidence, no external API
+        return {"brief": rule_based_brief(scan_result), "generated": True,
+                "error": None, "mode": "rule-based"}
 
     scan_type = scan_result.get("type") or scan_result.get("scan_type", "unknown")
     query     = scan_result.get("query", "unknown")
@@ -187,3 +185,57 @@ def _extract_facts(scan_type: str, data: dict) -> str:
             lines.append(f"CVEs: {s['vulns']}")
 
     return "\n".join(lines) if lines else "No detailed data available."
+
+
+_NEXT_STEPS = {
+    "likely_scam": [
+        "Do not click links, pay, share OTPs, or install apps from this source",
+        "Report at cybercrime.gov.in or call 1930 (financial fraud: report within hours)",
+        "Block and report the number/ID/domain on the platform where it reached you",
+    ],
+    "suspicious": [
+        "Verify through the organisation's official website or app, not through the contact you received",
+        "Do not share OTPs, PINs or personal documents until verified",
+        "Re-check later: new scam domains often get listed in feeds within days",
+    ],
+    "no_strong_signals": [
+        "No strong scam signals found, but absence of evidence is not proof of safety",
+        "Still verify unexpected requests for money or personal data via official channels",
+    ],
+}
+
+
+def rule_based_brief(scan_result: dict) -> str:
+    """Free, deterministic brief built only from fields in the scan result."""
+    sr = scan_result.get("scam_risk") or {}
+    report = scan_result.get("report") or {}
+    risk = report.get("risk") or {}
+    kind = str(scan_result.get("type") or scan_result.get("scan_type") or "unknown")
+    kind = "".join(c for c in kind if c.isalnum() or c == "_")[:20]
+    query = " ".join(str(scan_result.get("query", "unknown")).split())[:200]
+    verdict = sr.get("verdict", "not_applicable")
+    score = sr.get("score", 0)
+
+    lines = [f"SUBJECT: {query}", f"SCAN TYPE: {kind}", "---", "EXECUTIVE SUMMARY:"]
+    label = {"likely_scam": "LIKELY SCAM", "suspicious": "SUSPICIOUS",
+             "no_strong_signals": "NO STRONG SCAM SIGNALS"}.get(verdict, "NOT ASSESSED")
+    lines.append(f"Scam-risk verdict: {label} ({score}/100).")
+    if report.get("summary"):
+        lines.append(str(report["summary"])[:400])
+
+    sigs = sr.get("signals") or []
+    lines += ["", "RISK INDICATORS:"]
+    if sigs:
+        lines += [f"- (+{int(x.get('weight', 0))}) {str(x.get('detail', ''))[:200]}" for x in sigs[:10]]
+    else:
+        lines.append("- None triggered")
+    feeds = (sr.get("feeds") or {}).get("sources_checked") or []
+    if feeds:
+        lines.append(f"- Threat feeds checked: {', '.join(feeds)}")
+    if risk.get("level"):
+        lines += ["", "KEY FINDINGS:", f"- Exposure risk level: {risk['level']} ({risk.get('score', 0)}/100)"]
+
+    lines += ["", "RECOMMENDED FOLLOW-UP:"]
+    lines += [f"- {t}" for t in _NEXT_STEPS.get(verdict, _NEXT_STEPS["no_strong_signals"])]
+    lines += ["", "---", str(sr.get("disclaimer", ""))]
+    return "\n".join(lines)

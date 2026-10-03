@@ -331,8 +331,9 @@ def _pivot_domain_headers(domain: str) -> dict | None:
     """Fingerprint a domain — get title, server, tech stack from HTTP headers."""
     try:
         url = f"https://{domain}" if not domain.startswith("http") else domain
-        r = requests.get(url, timeout=8, allow_redirects=True,
-                         headers={"User-Agent": "Mozilla/5.0 (compatible; GhostTrace/3.0)"})
+        from modules.safe_http import safe_get
+        r = safe_get(url, timeout=8,
+                     headers={"User-Agent": "Mozilla/5.0 (compatible; GhostTrace/3.1)"})
         headers = dict(r.headers)
         tech = []
 

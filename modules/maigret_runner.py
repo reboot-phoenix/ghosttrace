@@ -31,8 +31,10 @@ def run_maigret(username: str, timeout: int = 120, top_sites: int = 500, sites: 
     sites: optional explicit site names (e.g. ["Instagram", "Facebook"]); overrides top_sites
     Full scan (3100+) takes ~5 min; 500 is ~60s
     """
+    if not username or username.startswith("-"):
+        return {"found": [], "total_checked": 0, "summary": "Invalid username", "installed": True, "raw_tags": {}}
     with tempfile.TemporaryDirectory() as tmpdir:
-        report_path = os.path.join(tmpdir, f"{username}.json")
+        report_path = os.path.join(tmpdir, "report.json")   # fixed name: never derive paths from input
         try:
             cmd = [
                 "maigret", username,
