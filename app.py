@@ -38,6 +38,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from detector import detect_input, is_valid_for_type, SUPPORTED_TYPES
 from modules.scam import assess as assess_scam
 from modules.threat_feeds import check as check_feeds
+from modules.page_analysis import analyze as analyze_page, first_seen
+from modules import reports as report_db
+from modules import feed_db
+from modules.web_mentions import scam_mentions
 from modules.email    import scan_email
 from modules.username import scan_username
 from modules.phone    import scan_phone
@@ -63,6 +67,8 @@ if _TRUSTED_PROXIES > 0:
 _SIGNING_KEY = (os.environ.get("SCAN_SIGNING_KEY") or "").encode() or secrets.token_bytes(32)
 if not os.environ.get("SCAN_SIGNING_KEY"):
     app.logger.warning("SCAN_SIGNING_KEY not set: AI-brief signatures reset on every restart")
+
+feed_db.start_background_refresh()   # loads/refreshes the known-bad database off the request path
 
 @app.after_request
 def _security_headers(resp):
@@ -142,7 +148,11 @@ def index():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "online", "service": "GhostTrace", "version": "3.0"})
+    try:
+        feeds = feed_db.stats()
+    except Exception:
+        feeds = {}
+    return jsonify({"status": "online", "service": "GhostTrace", "version": "3.1", "feeds": feeds})
 
 @app.route("/ping")
 def ping():
@@ -217,16 +227,34 @@ def scan():
 
         # Scam-indicator verdict (evidence-based, indicator-centric)
         ctx = {}
+        if scan_type in ("phone", "upi", "email", "domain"):
+            try:
+                ctx["reports"] = report_db.summary(scan_type, query)
+            except Exception:
+                app.logger.exception("report lookup failed")
+            if mode == "deep":      # DEEP: ask the open web whether it's already called a scam
+                ctx["web"] = scam_mentions(scan_type, query)
         if scan_type == "domain":
             rdap = raw.get("rdap") or {}
-            ctx = {"domain_created": rdap.get("registered") or None, "has_rdap": bool(rdap)}
+            ctx.update(domain_created=rdap.get("registered") or None, has_rdap=bool(rdap))
         feeds = {"hits": [], "sources_checked": []}
         if scan_type == "domain":
             feeds = check_feeds(original_url or query)
             ctx["feed_hits"] = feeds["hits"]
+            if mode == "deep":     # DEEP: actually look at the page + site history
+                ctx["page"] = analyze_page(original_url or f"https://{query}")
+                ctx["first_seen"] = first_seen(query)
         scam_risk = assess_scam("url" if original_url else scan_type,
                                 original_url or query, ctx)
         scam_risk["feeds"] = feeds
+        scam_risk["mode"] = mode
+        scam_risk["deep_available"] = scan_type in ("domain", "phone", "upi", "email")
+        scam_risk["indicator"] = {"kind": scan_type, "value": query} if scan_type in ("phone", "upi", "email", "domain") else None
+        scam_risk["reports"] = ctx.get("reports")
+        scam_risk["web"] = ctx.get("web")
+        if ctx.get("page"):
+            scam_risk["page"] = ctx["page"]
+            scam_risk["first_seen"] = ctx.get("first_seen")
 
         payload = {**raw, "correlation": correlation, "report": report, "scam_risk": scam_risk}
         payload["_sig"] = _sign(payload)
@@ -235,6 +263,26 @@ def scan():
     except Exception:
         app.logger.exception("scan failed (type=%s)", scan_type)
         return jsonify({"error": "Scan failed. Please try again."}), 500
+
+@app.route("/report", methods=["POST"])
+@rate_limited("report", 10)
+def report_scam():
+    body = request.get_json(silent=True) or {}
+    kind = (body.get("kind") or "").strip().lower()
+    value = (body.get("value") or "").strip()
+    category = (body.get("category") or "other").strip().lower()
+    if kind not in ("phone", "upi", "email", "domain") or not value or len(value) > 320:
+        return jsonify({"error": "Invalid report"}), 400
+    if not is_valid_for_type(kind, value):
+        return jsonify({"error": f"Not a valid {kind}"}), 400
+    try:
+        res = report_db.add_report(kind, value, category, request.remote_addr or "unknown")
+    except Exception:
+        app.logger.exception("report failed")
+        return jsonify({"error": "Could not save report"}), 500
+    if res["status"] == "limit":
+        return jsonify({"error": "Daily report limit reached"}), 429
+    return jsonify(res)
 
 @app.route("/brief", methods=["POST"])
 @rate_limited("brief", BRIEF_RATE_LIMIT_MAX)
