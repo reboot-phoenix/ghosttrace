@@ -280,3 +280,12 @@ BSc IT — Techno India University
 *GhostTrace — because everyone leaves a trace.*
 
 </div>
+
+
+## Scam-indicator checks (v3.1)
+
+GhostTrace now returns a `scam_risk` verdict (`likely_scam` / `suspicious` / `no_strong_signals`) with the evidence behind it, for phone numbers, UPI IDs, emails, domains and URLs. It judges *indicators*, not people, and is heuristic: verify with the official source and report fraud at cybercrime.gov.in or 1930.
+
+New/changed env vars: `LASTFM_API_KEY` (optional, replaces a previously hard-coded key), `SCAN_SIGNING_KEY` (set in production).
+
+Security hardening in v3.1: server-side validation of every scan type, SSRF-safe fetching (`modules/safe_http.py`), signed-result expiry on `/brief`, security headers, threaded gunicorn worker.

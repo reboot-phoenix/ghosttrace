@@ -35,7 +35,9 @@ from urllib.parse import urlparse
 from flask import Flask, request, jsonify, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from detector import detect_input, SUPPORTED_TYPES
+from detector import detect_input, is_valid_for_type, SUPPORTED_TYPES
+from modules.scam import assess as assess_scam
+from modules.threat_feeds import check as check_feeds
 from modules.email    import scan_email
 from modules.username import scan_username
 from modules.phone    import scan_phone
@@ -46,6 +48,7 @@ from modules.report    import build_report
 from modules.ai_brief  import generate_brief
 from config import RATE_LIMIT_MAX, RATE_LIMIT_WINDOW
 
+BRIEF_MAX_AGE_S      = 3600                     # signed scan results expire after 1 hour
 BRIEF_RATE_LIMIT_MAX = 10                       # AI briefs per window per IP (costs money)
 MAX_BODY_BYTES       = 1024 * 1024              # 1 MB request cap
 
@@ -58,6 +61,16 @@ if _TRUSTED_PROXIES > 0:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_TRUSTED_PROXIES, x_proto=1, x_host=1)
 
 _SIGNING_KEY = (os.environ.get("SCAN_SIGNING_KEY") or "").encode() or secrets.token_bytes(32)
+if not os.environ.get("SCAN_SIGNING_KEY"):
+    app.logger.warning("SCAN_SIGNING_KEY not set: AI-brief signatures reset on every restart")
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return resp
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 _rate_store: dict[tuple[str, str], deque] = defaultdict(deque)
@@ -136,6 +149,7 @@ def ping():
     return "pong", 200
 
 @app.route("/detect", methods=["POST"])
+@rate_limited("detect", 120)
 def detect():
     body  = request.get_json(silent=True) or {}
     query = (body.get("query") or "").strip()
@@ -165,14 +179,19 @@ def scan():
     if not scan_type or scan_type == "auto":
         scan_type = detect_input(query)
 
-    # A pasted URL is scanned as its domain
+    # A pasted URL is scanned as its domain, but the full URL is kept for scam analysis
+    original_url = None
     if scan_type == "url":
         host = urlparse(query).hostname
         if host:
+            original_url = query
             query, scan_type = host, "domain"
 
     if scan_type not in SUPPORTED_TYPES:
         return jsonify({"error": f"Unsupported type: {scan_type}. Supported: {sorted(SUPPORTED_TYPES)}"}), 400
+    # Never trust a client-supplied scan_type: the value must actually match it
+    if not is_valid_for_type(scan_type, query):
+        return jsonify({"error": f"Query is not a valid {scan_type}"}), 400
 
     try:
         # ── Run the scan ──────────────────────────────────────────────────
@@ -182,6 +201,7 @@ def scan():
         elif scan_type == "name":   raw = scan_name(query, filters)
         elif scan_type == "ip":     raw = scan_ip(query)
         elif scan_type == "domain": raw = scan_domain(query)
+        elif scan_type == "upi":    raw = {"type": "upi", "query": query, "score": 0, "chips": []}
         else: return jsonify({"error": "Unknown scan type"}), 400
 
         raw["scan_type"] = scan_type
@@ -189,10 +209,26 @@ def scan():
         raw["mode"]      = mode
 
         # ── Correlation + report (deep adds network pivots + social pivoting) ──
-        correlation = correlate(raw, deep=(mode == "deep"))
+        if scan_type == "upi":      # indicator-only: no crawling, nothing to correlate
+            correlation = {"identity": {}, "findings": [], "pivots": []}
+        else:
+            correlation = correlate(raw, deep=(mode == "deep"))
         report      = build_report(raw, correlation, scan_mode=mode)
 
-        payload = {**raw, "correlation": correlation, "report": report}
+        # Scam-indicator verdict (evidence-based, indicator-centric)
+        ctx = {}
+        if scan_type == "domain":
+            rdap = raw.get("rdap") or {}
+            ctx = {"domain_created": rdap.get("registered") or None, "has_rdap": bool(rdap)}
+        feeds = {"hits": [], "sources_checked": []}
+        if scan_type == "domain":
+            feeds = check_feeds(original_url or query)
+            ctx["feed_hits"] = feeds["hits"]
+        scam_risk = assess_scam("url" if original_url else scan_type,
+                                original_url or query, ctx)
+        scam_risk["feeds"] = feeds
+
+        payload = {**raw, "correlation": correlation, "report": report, "scam_risk": scam_risk}
         payload["_sig"] = _sign(payload)
         return jsonify(payload)
 
@@ -209,6 +245,9 @@ def brief():
         return jsonify({"error": "No scan_result provided"}), 400
     if not _verify(scan_result):
         return jsonify({"error": "Scan result is invalid or expired. Re-run the scan, then generate the brief."}), 400
+    ts = scan_result.get("timestamp")
+    if not isinstance(ts, (int, float)) or time.time() - ts > BRIEF_MAX_AGE_S:
+        return jsonify({"error": "Scan result expired. Re-run the scan, then generate the brief."}), 400
     try:
         return jsonify(generate_brief(scan_result))
     except Exception:

@@ -11,6 +11,7 @@ import re
 
 _PATTERNS = [
     ("email",       r"^[\w\.\+\-]+@[\w\.\-]+\.\w{2,}$"),
+    ("upi",         r"^[A-Za-z0-9][\w.\-]{1,63}@[A-Za-z]{2,32}$"),
     ("phone",       r"^\+?[0-9\s\-\(\)]{7,20}$"),
     ("ip",          r"^(?:\d{1,3}\.){3}\d{1,3}$"),
     ("url",         r"^https?://"),
@@ -32,4 +33,21 @@ def detect_input(text: str) -> str:
     return "unknown"
 
 
-SUPPORTED_TYPES = {"name", "email", "phone", "username", "ip", "domain"}
+SUPPORTED_TYPES = {"name", "email", "phone", "username", "ip", "domain", "upi"}
+
+
+def is_valid_for_type(kind: str, text: str) -> bool:
+    """Server-side validation: never trust a client-supplied scan_type."""
+    import ipaddress
+    text = text.strip()
+    if kind == "ip":
+        try:
+            ipaddress.ip_address(text)
+            return True
+        except ValueError:
+            return False
+    if kind == "name":
+        return bool(re.match(r"^[A-Za-z][A-Za-z\s\.\-']{1,79}$", text))
+    patterns = dict(_PATTERNS)
+    pat = patterns.get(kind)
+    return bool(pat and re.match(pat, text))
