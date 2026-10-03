@@ -127,6 +127,9 @@ function renderResult(data) {
   modeBadge.textContent  = (data.mode || 'fast').toUpperCase() + ' SCAN';
   modeBadge.className    = 'mode-badge ' + (data.mode === 'deep' ? 'deep' : 'fast');
 
+  // Scam verdict banner (indicator-based)
+  renderScamBanner(data.scam_risk);
+
   // Intelligence summary bar
   renderSummaryBar(report, data);
 
@@ -148,6 +151,32 @@ function renderResult(data) {
   document.querySelectorAll('.section-header').forEach(h => {
     h.addEventListener('click', () => h.closest('.section').classList.toggle('collapsed'));
   });
+}
+
+// ── Scam verdict banner ───────────────────────────────────────────────────────
+function renderScamBanner(sr) {
+  let el = document.getElementById('scam-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'scam-banner';
+    const host = document.getElementById('intel-summary');
+    host.parentNode.insertBefore(el, host);
+  }
+  if (!sr || sr.verdict === 'not_applicable') { el.innerHTML = ''; return; }
+  const meta = {
+    likely_scam:       {c: 'var(--red)',    t: 'LIKELY SCAM'},
+    suspicious:        {c: 'var(--orange, #f90)', t: 'SUSPICIOUS'},
+    no_strong_signals: {c: 'var(--green, #3c9)',  t: 'NO STRONG SCAM SIGNALS'},
+  }[sr.verdict] || {c: 'var(--text3)', t: 'UNKNOWN'};
+  const rows = (sr.signals || []).map(s =>
+    `<li><b>+${esc(s.weight)}</b> ${esc(s.detail)}</li>`).join('');
+  el.innerHTML = `
+    <div style="border:1px solid ${meta.c};border-left:4px solid ${meta.c};border-radius:6px;padding:12px 14px;margin-bottom:12px;font-family:var(--mono);font-size:12px">
+      <div style="color:${meta.c};font-weight:700;letter-spacing:.5px">${esc(meta.t)} &nbsp; ${esc(sr.score)}/100</div>
+      ${rows ? `<ul style="margin:8px 0 0 16px;line-height:1.7">${rows}</ul>` : ''}
+      ${(sr.feeds && sr.feeds.sources_checked && sr.feeds.sources_checked.length) ? `<div style="margin-top:8px;color:var(--text3);font-size:11px">Feeds checked: ${esc(sr.feeds.sources_checked.join(', '))}</div>` : ''}
+      <div style="margin-top:8px;color:var(--text3);font-size:11px">${esc(sr.disclaimer)}</div>
+    </div>`;
 }
 
 // ── Summary bar ───────────────────────────────────────────────────────────────
@@ -572,10 +601,10 @@ function renderAIBriefTab() {
   document.getElementById('tab-content-aibrief').innerHTML = `
     <div style="padding:4px 0">
       <div style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-bottom:14px;line-height:1.6">
-        Generate an AI-written intelligence brief based on all findings above.<br>
-        Requires <strong style="color:var(--cyan)">ANTHROPIC_API_KEY</strong> in Railway environment variables.
+        Generate a plain-language brief with the verdict, evidence and recommended next steps.<br>
+        Free by default. Optionally set <strong style="color:var(--cyan)">ANTHROPIC_API_KEY</strong> for an AI-written version.
       </div>
-      <button class="btn-scan" style="max-width:260px;margin-bottom:16px" onclick="generateBrief()">🤖 Generate Intelligence Brief</button>
+      <button class="btn-scan" style="max-width:260px;margin-bottom:16px" onclick="generateBrief()">📄 Generate Brief</button>
       <div id="brief-content"></div>
     </div>`;
 }
@@ -594,9 +623,7 @@ async function generateBrief() {
     const data = await res.json();
     if (data.error && !data.brief) {
       el.innerHTML = `<div style="color:var(--red);font-family:var(--mono);font-size:11px;line-height:1.7">
-        ⚠️ ${esc(data.error)}<br><br>
-        Add <strong>ANTHROPIC_API_KEY</strong> to Railway → Variables.<br>
-        Get a free key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--cyan)">console.anthropic.com</a>
+        ⚠️ ${esc(data.error)}
       </div>`;
       return;
     }
