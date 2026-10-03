@@ -5,7 +5,13 @@ Fixtures and markers available to all test files.
 """
 
 import pytest
-import sys, os
+import sys, os, tempfile
+
+# Keep tests hermetic: no background downloads, no writes to the real data/ folder
+os.environ.setdefault("FEED_REFRESH", "0")
+_tmp = tempfile.mkdtemp(prefix="ghosttrace-test-")
+os.environ.setdefault("FEEDS_DB", os.path.join(_tmp, "feeds.db"))
+os.environ.setdefault("REPORTS_DB", os.path.join(_tmp, "reports.db"))
 
 # Make sure the project root is always on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

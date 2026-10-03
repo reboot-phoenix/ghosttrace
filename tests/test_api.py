@@ -33,7 +33,7 @@ class TestHealth:
         data = json.loads(r.data)
         assert data["status"] == "online"
         assert data["service"] == "GhostTrace"
-        assert data["version"] == "3.0"
+        assert data["version"] == "3.1"
 
 
 # ── /ping ─────────────────────────────────────────────────────────────────────
