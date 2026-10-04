@@ -268,3 +268,24 @@ def test_check_uses_local_db_and_scores(fdb, monkeypatch):
     assert out["hits"] and any("Local database" in s for s in out["sources_checked"])
     r = assess("url", "https://totally-new-phish.example/login", {"feed_hits": out["hits"]})
     assert r["verdict"] == "likely_scam"
+
+
+# ── structure signals (tuned on real phishing vs top-site data) ───────────────
+@pytest.mark.parametrize("host,flagged", [
+    ("lighthearted-truffle-abf285.netlify.app", True),                         # random-looking on free host
+    ("9hqbn0uyk2ju793r59dg5cs2wqxbgpr-65218347249.shopifypreview.com", True),  # long number subdomain
+    ("kimerickreations.blogspot.com", False),                                   # readable blog name
+    ("numerology-thenumbersandtheirmeanings.blogspot.com", False),
+    ("reboot-phoenix.github.io", False),                                        # personal site on free host
+    ("www.sbi.co.in", False), ("netbanking.hdfcbank.com", False), ("aws.amazon.com", False),
+    ("jmljefdywjpngwre-dot-millinium.ey.r.appspot.com", None),                  # cloud infra: just must not crash
+])
+def test_structure_signals(host, flagged):
+    r = assess("domain", host)
+    if flagged is not None:
+        assert (r["verdict"] != "no_strong_signals") is flagged
+
+
+def test_free_hosting_alone_is_a_weak_signal():
+    r = assess("domain", "mysite.pages.dev")
+    assert r["verdict"] == "no_strong_signals" and any(s["id"] == "shared_hosting" for s in r["signals"])
