@@ -1,0 +1,157 @@
+{
+  "_about": "Golden verdict cases. expect=scam means verdict must be suspicious or likely_scam (heuristics only, no network); expect=safe means no_strong_signals. Add every confirmed miss or false alarm from /admin/misses here. known_gaps are misses we have not fixed yet (shown as xfail; they flip to passing when fixed).",
+  "cases": [
+    {
+      "kind": "domain",
+      "value": "sbi-kyc-update.xyz",
+      "expect": "scam",
+      "note": "brand + keyword + risky TLD"
+    },
+    {
+      "kind": "domain",
+      "value": "paytm-reward.top",
+      "expect": "scam",
+      "note": "brand + reward bait"
+    },
+    {
+      "kind": "domain",
+      "value": "hdfcbannk.com",
+      "expect": "scam",
+      "note": "typosquat of hdfcbank"
+    },
+    {
+      "kind": "domain",
+      "value": "lighthearted-truffle-abf285.netlify.app",
+      "expect": "scam",
+      "note": "random-looking subdomain on free host (real feed entry)"
+    },
+    {
+      "kind": "domain",
+      "value": "9hqbn0uyk2ju793r59dg5cs2wqxbgpr-65218347249.shopifypreview.com",
+      "expect": "scam",
+      "note": "long numeric auto-generated subdomain (real feed entry)"
+    },
+    {
+      "kind": "domain",
+      "value": "88917933782242015160597.jamb2022.co",
+      "expect": "scam",
+      "note": "long digit run (real feed entry)"
+    },
+    {
+      "kind": "upi",
+      "value": "refund.support123@okaxis",
+      "expect": "scam",
+      "note": "scam-style UPI handle name"
+    },
+    {
+      "kind": "email",
+      "value": "sbi.hr.jobs@gmail.com",
+      "expect": "scam",
+      "note": "brand + HR role on free mail"
+    },
+    {
+      "kind": "email",
+      "value": "anyone@mailinator.com",
+      "expect": "scam",
+      "note": "disposable email provider"
+    },
+    {
+      "kind": "domain",
+      "value": "www.sbi.co.in",
+      "expect": "safe",
+      "note": "official SBI"
+    },
+    {
+      "kind": "domain",
+      "value": "onlinesbi.sbi",
+      "expect": "safe",
+      "note": "official SBI net banking"
+    },
+    {
+      "kind": "domain",
+      "value": "netbanking.hdfcbank.com",
+      "expect": "safe",
+      "note": "official HDFC subdomain"
+    },
+    {
+      "kind": "domain",
+      "value": "www.irctc.co.in",
+      "expect": "safe",
+      "note": "official IRCTC"
+    },
+    {
+      "kind": "domain",
+      "value": "accounts.google.com",
+      "expect": "safe",
+      "note": "Google subdomain"
+    },
+    {
+      "kind": "domain",
+      "value": "aws.amazon.com",
+      "expect": "safe",
+      "note": "Amazon subdomain"
+    },
+    {
+      "kind": "domain",
+      "value": "docs.python.org",
+      "expect": "safe",
+      "note": "python docs"
+    },
+    {
+      "kind": "domain",
+      "value": "tiu.ac.in",
+      "expect": "safe",
+      "note": "university domain"
+    },
+    {
+      "kind": "domain",
+      "value": "reboot-phoenix.github.io",
+      "expect": "safe",
+      "note": "personal site on free host"
+    },
+    {
+      "kind": "domain",
+      "value": "pyrunner-apex.pages.dev",
+      "expect": "safe",
+      "note": "personal site on free host"
+    },
+    {
+      "kind": "domain",
+      "value": "ghosttrace.up.railway.app",
+      "expect": "safe",
+      "note": "app on cloud host"
+    },
+    {
+      "kind": "domain",
+      "value": "kimerickreations.blogspot.com",
+      "expect": "safe",
+      "note": "readable blog on free host (real top-1M entry)"
+    },
+    {
+      "kind": "upi",
+      "value": "rahul@oksbi",
+      "expect": "safe",
+      "note": "normal personal UPI"
+    }
+  ],
+  "known_gaps": [
+    {
+      "kind": "domain",
+      "value": "agltradeuae.com",
+      "expect": "scam",
+      "note": "real feed entry; clean-looking own domain, only page/feeds/reports can catch it"
+    },
+    {
+      "kind": "domain",
+      "value": "mail.tjdoo.c505.net",
+      "expect": "scam",
+      "note": "real feed entry; no heuristic signal"
+    },
+    {
+      "kind": "domain",
+      "value": "potmeetspopstore.id",
+      "expect": "scam",
+      "note": "real feed entry; plausible shop name"
+    }
+  ]
+}

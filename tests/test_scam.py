@@ -289,3 +289,54 @@ def test_structure_signals(host, flagged):
 def test_free_hosting_alone_is_a_weak_signal():
     r = assess("domain", "mysite.pages.dev")
     assert r["verdict"] == "no_strong_signals" and any(s["id"] == "shared_hosting" for s in r["signals"])
+
+
+# ── feedback loop ─────────────────────────────────────────────────────────────
+def test_feedback_dedupe_and_scam_label_files_a_report(rdb):
+    from modules import feedback as fb
+    assert fb.add_feedback("domain", "agltradeuae.com", "no_strong_signals", "scam", "1.1.1.1")["status"] == "recorded"
+    assert fb.add_feedback("domain", "agltradeuae.com", "no_strong_signals", "scam", "1.1.1.1")["status"] == "duplicate"
+    assert rdb.summary("domain", "agltradeuae.com")["count"] == 1          # "scam" also counts as a report
+
+
+def test_safe_label_never_lowers_a_score(rdb):
+    from modules import feedback as fb
+    for i in range(5):
+        fb.add_feedback("domain", "evil-kyc.example", "likely_scam", "safe", f"2.2.2.{i}")
+    assert rdb.summary("domain", "evil-kyc.example")["count"] == 0          # only logged for human review
+    q = fb.review_queue()
+    assert q["false_alarms"][0]["indicator"] == "domain:evil-kyc.example" and q["false_alarms"][0]["reporters"] == 5
+
+
+def test_review_queue_lists_misses_and_stats(rdb):
+    from modules import feedback as fb
+    fb.add_feedback("upi", "nice.person@oksbi", "no_strong_signals", "scam", "3.3.3.1")
+    fb.add_feedback("upi", "nice.person@oksbi", "no_strong_signals", "scam", "3.3.3.2")
+    fb.add_feedback("domain", "ok.example", "no_strong_signals", "correct", "3.3.3.3")
+    q = fb.review_queue()
+    assert q["missed_scams"][0]["reporters"] == 2 and q["stats"]["agreement_pct"] == 33.3
+    assert fb.review_queue(min_reporters=3)["missed_scams"] == []
+
+
+def test_feedback_rejects_garbage(rdb):
+    from modules import feedback as fb
+    assert fb.add_feedback("domain", "x.example", "bogus", "scam", "1.1.1.1")["status"] == "invalid"
+    assert fb.add_feedback("domain", "x.example", "suspicious", "maybe", "1.1.1.1")["status"] == "invalid"
+    assert fb.add_feedback("domain", "no-dot", "suspicious", "scam", "1.1.1.1")["status"] == "invalid"
+
+
+def test_feedback_endpoint_and_admin_gate(rdb, monkeypatch):
+    from app import app
+    c = app.test_client()
+    ok = c.post("/feedback", json={"kind": "domain", "value": "agltradeuae.com",
+                                   "verdict": "no_strong_signals", "label": "scam"})
+    assert ok.status_code == 200 and ok.get_json()["status"] == "recorded"
+    assert c.post("/feedback", json={"kind": "domain", "value": "../x", "verdict": "suspicious", "label": "scam"}).status_code == 400
+    assert c.post("/feedback", json={"kind": "domain", "value": "a.example", "verdict": "x", "label": "scam"}).status_code == 400
+    monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+    assert c.get("/admin/misses").status_code == 404                              # disabled by default
+    monkeypatch.setenv("ADMIN_TOKEN", "s3cret-token")
+    assert c.get("/admin/misses").status_code == 403
+    assert c.get("/admin/misses", headers={"X-Admin-Token": "wrong"}).status_code == 403
+    r = c.get("/admin/misses", headers={"X-Admin-Token": "s3cret-token"})
+    assert r.status_code == 200 and r.get_json()["missed_scams"][0]["indicator"] == "domain:agltradeuae.com"
