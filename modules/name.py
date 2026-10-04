@@ -7,6 +7,7 @@ for each platform — not just links, real data.
 
 import concurrent.futures
 from modules.search import search
+from modules.name_match import filter_results
 from config import SOCIAL_DOMAINS
 
 
@@ -33,7 +34,10 @@ def _run_dork(dork_def: dict, name: str, context: str) -> dict:
     query = dork_def["query_tpl"].format(name=name)
     if context:
         query = f"{query} {context}"
-    results = search(query, max_results=5)
+    raw = search(query, max_results=10)
+    # Keep only results that really contain the full name; search engines return look-alikes
+    results, discarded = filter_results(name, raw)
+    results = results[:5]
     return {
         "label":   dork_def["label"],
         "icon":    dork_def["icon"],
@@ -43,6 +47,7 @@ def _run_dork(dork_def: dict, name: str, context: str) -> dict:
         "results": results,
         "found":   len(results) > 0,
         "count":   len(results),
+        "discarded": discarded,
     }
 
 
@@ -77,6 +82,8 @@ def scan_name(name: str, filters: list[str] | None = None) -> dict:
     if social_hits:         chips.append({"label": f"{len(social_hits)} social profiles found",    "color": "green"})
     if general_hits:        chips.append({"label": f"{len(general_hits)} web mentions",            "color": "blue"})
     if dorks_with_results:  chips.append({"label": f"{len(dorks_with_results)}/14 platforms hit",  "color": "orange"})
+    discarded_total = sum(d.get("discarded", 0) for d in dork_results)
+    if discarded_total:     chips.append({"label": f"{discarded_total} look-alike results discarded", "color": "gray"})
     if filters:             chips.append({"label": f"Context: {', '.join(filters[:2])}",           "color": "gray"})
     if not chips:           chips.append({"label": "No results found",                             "color": "gray"})
 
@@ -86,9 +93,6 @@ def scan_name(name: str, filters: list[str] | None = None) -> dict:
         {"label": "LinkedIn people search", "url": f"https://www.linkedin.com/search/results/people/?keywords={encoded_plus}"},
         {"label": "Facebook people search", "url": f"https://www.facebook.com/search/people/?q={encoded_plus}"},
         {"label": "X (Twitter) search",     "url": f"https://x.com/search?q=%22{encoded}%22&f=user"},
-        {"label": "Pipl",                   "url": f"https://pipl.com/search/?q={encoded_plus}"},
-        {"label": "Spokeo",                 "url": f"https://www.spokeo.com/search?q={encoded_plus}"},
-        {"label": "That's Them",            "url": f"https://thatsthem.com/name/{name.replace(' ','-').lower()}"},
     ]
 
     return {
@@ -97,6 +101,7 @@ def scan_name(name: str, filters: list[str] | None = None) -> dict:
         "filters":      filters,
         "score":        score,
         "chips":        chips,
+        "discarded":    discarded_total,
         "dork_results": dork_results,
         "social_hits":  social_hits,
         "general_hits": general_hits,
