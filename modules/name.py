@@ -29,6 +29,10 @@ _DORK_DEFINITIONS = [
 ]
 
 
+# Fast mode spends 5 searches instead of 14, so a 100/day search quota lasts ~20 scans, not ~7.
+FAST_DORKS = {"linkedin", "github", "twitter", "instagram", "images"}
+
+
 def _run_dork(dork_def: dict, name: str, context: str) -> dict:
     """Run a single dork search and return results."""
     query = dork_def["query_tpl"].format(name=name)
@@ -51,18 +55,18 @@ def _run_dork(dork_def: dict, name: str, context: str) -> dict:
     }
 
 
-def scan_name(name: str, filters: list[str] | None = None) -> dict:
+def scan_name(name: str, filters: list[str] | None = None, mode: str = "deep") -> dict:
     name    = name.strip()
     filters = filters or []
     context = " ".join(f'"{f}"' for f in filters if f.strip())
 
-    # Run all 14 dork searches in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=14) as pool:
-        futures = [pool.submit(_run_dork, d, name, context) for d in _DORK_DEFINITIONS]
+    defs = [d for d in _DORK_DEFINITIONS if mode == "deep" or d["key"] in FAST_DORKS]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(defs)) as pool:
+        futures = [pool.submit(_run_dork, d, name, context) for d in defs]
         dork_results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
     # Sort back to original order
-    order = {d["key"]: i for i, d in enumerate(_DORK_DEFINITIONS)}
+    order = {d["key"]: i for i, d in enumerate(defs)}
     dork_results.sort(key=lambda x: order.get(x["key"], 99))
 
     # Flatten all results for scoring
@@ -81,7 +85,7 @@ def scan_name(name: str, filters: list[str] | None = None) -> dict:
     chips = []
     if social_hits:         chips.append({"label": f"{len(social_hits)} social profiles found",    "color": "green"})
     if general_hits:        chips.append({"label": f"{len(general_hits)} web mentions",            "color": "blue"})
-    if dorks_with_results:  chips.append({"label": f"{len(dorks_with_results)}/14 platforms hit",  "color": "orange"})
+    if dorks_with_results:  chips.append({"label": f"{len(dorks_with_results)}/{len(defs)} platforms hit",  "color": "orange"})
     discarded_total = sum(d.get("discarded", 0) for d in dork_results)
     if discarded_total:     chips.append({"label": f"{discarded_total} look-alike results discarded", "color": "gray"})
     if filters:             chips.append({"label": f"Context: {', '.join(filters[:2])}",           "color": "gray"})

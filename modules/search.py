@@ -22,6 +22,34 @@ from config import GOOGLE_CSE_KEY, GOOGLE_CSE_ID
 from modules.cache import TTLCache
 
 _cache = TTLCache(ttl=1800, max_items=1000)
+
+# Google CSE free tier = 100 queries/day. Count our own usage and stop calling it once the
+# quota is gone (the API answers with an error), so we fall straight through to other engines.
+CSE_DAILY_LIMIT = int(os.environ.get("CSE_DAILY_LIMIT", "95"))
+_cse = {"day": "", "used": 0, "exhausted": False, "last_error": None}
+_cse_lock = threading.Lock()
+
+
+def _cse_today() -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
+def _cse_available() -> bool:
+    with _cse_lock:
+        if _cse["day"] != _cse_today():
+            _cse.update(day=_cse_today(), used=0, exhausted=False, last_error=None)
+        return not _cse["exhausted"] and _cse["used"] < CSE_DAILY_LIMIT
+
+
+def search_status() -> dict:
+    """For /health: which engines are configured and how much CSE quota we've used."""
+    _cse_available()
+    with _cse_lock:
+        return {"google_cse": {"configured": bool(GOOGLE_CSE_KEY and GOOGLE_CSE_ID),
+                               "used_today": _cse["used"], "daily_limit": CSE_DAILY_LIMIT,
+                               "exhausted": _cse["exhausted"], "last_error": _cse["last_error"]},
+                "brave": {"configured": bool(os.environ.get("BRAVE_API_KEY"))},
+                "duckduckgo": {"configured": True}}
 _ddg_slots = threading.BoundedSemaphore(3)       # at most 3 concurrent DDG queries
 _sleep = time.sleep                               # indirection so tests can skip real waits
 MIN_GOOD = 3                                      # below this, ask the next engine too
@@ -40,7 +68,7 @@ def search(query: str, max_results: int = 10) -> list[dict]:
     results: list[dict] = []
     try:
         engines = []
-        if GOOGLE_CSE_KEY and GOOGLE_CSE_ID:
+        if GOOGLE_CSE_KEY and GOOGLE_CSE_ID and _cse_available():
             engines.append(_google_cse)
         if os.environ.get("BRAVE_API_KEY"):
             engines.append(_brave)
@@ -63,13 +91,24 @@ def _merge(a: list[dict], b: list[dict]) -> list[dict]:
 
 
 def _google_cse(query: str, n: int) -> list[dict]:
+    with _cse_lock:
+        _cse["used"] += 1
     try:
         r = requests.get(
             "https://www.googleapis.com/customsearch/v1",
             params={"key": GOOGLE_CSE_KEY, "cx": GOOGLE_CSE_ID, "q": query, "num": min(n, 10)},
             timeout=10,
         )
-        items = r.json().get("items", [])
+        data = r.json()
+        if "error" in data:        # quota exhausted, bad key, API not enabled, etc.
+            err = data["error"]
+            msg = f"{err.get('code')}: {str(err.get('message', ''))[:120]}"
+            with _cse_lock:
+                _cse["last_error"] = msg
+                if err.get("code") in (403, 429):
+                    _cse["exhausted"] = True       # stop wasting calls until tomorrow (UTC)
+            return []
+        items = data.get("items", [])
         return [{"title": i.get("title", ""), "link": i.get("link", ""), "snippet": i.get("snippet", "")} for i in items]
     except Exception:
         return []

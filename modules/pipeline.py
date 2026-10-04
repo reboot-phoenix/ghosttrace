@@ -55,7 +55,7 @@ def run_scan(p: dict, scanners: dict, sign, progress=lambda label: None) -> dict
         raw = {"type": "upi", "query": query, "score": 0, "chips": []}
     else:
         fn = scanners[st]
-        args = (query, filters) if st == "name" else (query,)
+        args = (query, filters, mode) if st == "name" else (query,)
         try:
             raw = run_with_timeout(fn, SCAN_TIMEOUT[mode], *args)
         except ScanTimeout:
