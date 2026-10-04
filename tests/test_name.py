@@ -49,10 +49,15 @@ class TestRunDork:
         out = _run_dork(_DORK_DEFINITIONS[0], "John Doe", '"Kolkata"')
         assert out["query"].endswith('"Kolkata"')
 
-    @patch("modules.name.search", return_value=[{"title": "t", "link": "https://x.com/a", "snippet": "s"}])
+    @patch("modules.name.search", return_value=[{"title": "John Doe - Profile", "link": "https://x.com/a", "snippet": "s"}])
     def test_found_flag_and_count(self, _):
         out = _run_dork(_DORK_DEFINITIONS[0], "John Doe", "")
         assert out["found"] is True and out["count"] == 1
+
+    @patch("modules.name.search", return_value=[{"title": "Jon Dough", "link": "https://x.com/a", "snippet": "s"}])
+    def test_lookalike_name_is_discarded(self, _):
+        out = _run_dork(_DORK_DEFINITIONS[0], "John Doe", "")
+        assert out["found"] is False and out["discarded"] == 1
 
 
 class TestScanName:
