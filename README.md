@@ -303,3 +303,15 @@ Security hardening in v3.1: server-side validation of every scan type, SSRF-safe
 | Legit sites on free hosts (blogspot, github.io, ...) | 5.4% | low |
 
 What this means: for a brand-new phishing site that no feed lists yet, the heuristics alone catch roughly a quarter, with few false alarms on ordinary sites. The rest need the feeds (known-bad lookup) and Deep mode (page analysis). A simple statistical model trained on the same data did no better once dataset artifacts were removed, so it is not used. Caveats: the phishing list is already-reported phishing, and top-1M sites are only a proxy for everyday legitimate sites.
+
+
+## How GhostTrace improves (the feedback loop)
+
+It does not learn by itself; it improves through a loop a maintainer runs:
+
+1. **Users give feedback** on every phone / UPI / email / domain result: "Was this verdict right?" `YES`, `ACTUALLY SAFE`, `ACTUALLY A SCAM`. Stored: indicator, our verdict, their answer, a salted reporter hash. "Actually a scam" also files a community report. "Actually safe" never lowers a score (a scammer could vote for their own site); it only goes into the review list.
+2. **Review**: set `ADMIN_TOKEN`, then `GET /admin/misses` with header `X-Admin-Token`, or run `python -m modules.feedback misses`. It lists *missed scams* (users say scam, we said clean) and *false alarms* (users say safe, we flagged), most-reported first, plus an agreement rate.
+3. **Turn each confirmed miss into a test**: add it to `tests/golden_cases.json` (`cases` if the fix is done, `known_gaps` if not).
+4. **Fix and measure**: change a signal in `modules/scam.py`, run `pytest` (the golden cases must all still pass) and `python tools/eval_heuristics.py` (detection up, false alarms not up), then update the table above.
+
+Env vars: `ADMIN_TOKEN` (enables the review endpoint; leave unset to disable it), `REPORTS_DB` (put it on a persistent volume so feedback survives deploys).

@@ -40,7 +40,7 @@ from modules.scam import assess as assess_scam
 from modules.threat_feeds import check as check_feeds
 from modules.page_analysis import analyze as analyze_page, first_seen
 from modules import reports as report_db
-from modules import feed_db, jobs
+from modules import feed_db, jobs, feedback as feedback_db
 from modules.search import search_status
 from modules.pipeline import run_scan
 from modules.timeouts import ScanTimeout
@@ -270,6 +270,42 @@ def report_scam():
     if res["status"] == "limit":
         return jsonify({"error": "Daily report limit reached"}), 429
     return jsonify(res)
+
+@app.route("/feedback", methods=["POST"])
+@rate_limited("feedback", 30)
+def feedback():
+    body = request.get_json(silent=True) or {}
+    kind = (body.get("kind") or "").strip().lower()
+    value = (body.get("value") or "").strip()
+    verdict = (body.get("verdict") or "").strip().lower()
+    label = (body.get("label") or "").strip().lower()
+    if kind not in ("phone", "upi", "email", "domain") or not value or len(value) > 320:
+        return jsonify({"error": "Invalid feedback"}), 400
+    if not is_valid_for_type(kind, value):
+        return jsonify({"error": f"Not a valid {kind}"}), 400
+    try:
+        res = feedback_db.add_feedback(kind, value, verdict, label, request.remote_addr or "unknown")
+    except Exception:
+        app.logger.exception("feedback failed")
+        return jsonify({"error": "Could not save feedback"}), 500
+    if res["status"] == "invalid":
+        return jsonify({"error": "Invalid feedback"}), 400
+    if res["status"] == "limit":
+        return jsonify({"error": "Daily feedback limit reached"}), 429
+    return jsonify(res)
+
+
+@app.route("/admin/misses")
+@rate_limited("admin", 60)
+def admin_misses():
+    """Review queue for the maintainer. Disabled unless ADMIN_TOKEN is set."""
+    token = os.environ.get("ADMIN_TOKEN", "")
+    if not token:
+        return jsonify({"error": "Not found"}), 404
+    if not hmac.compare_digest(request.headers.get("X-Admin-Token", ""), token):
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify(feedback_db.review_queue())
+
 
 @app.route("/brief", methods=["POST"])
 @rate_limited("brief", BRIEF_RATE_LIMIT_MAX)
