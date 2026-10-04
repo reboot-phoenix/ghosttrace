@@ -50,18 +50,44 @@ async function runScan() {
   setLoading(true);
   showLoading(scan_type, currentMode);
   try {
-    const res  = await fetch('/scan', {
+    const res = await fetch('/scan/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, scan_type, filters: currentTab === 'name' ? [..._filters] : [], mode: currentMode }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) { showError(data.error || 'Scan failed.'); setLoading(false); return; }
-    currentResult = data;
-    saveHistory(data);
-    renderResult(data);
+    const start = await res.json();
+    if (!res.ok || start.error) { showError(start.error || 'Scan failed.'); setLoading(false); return; }
+
+    // Poll real progress until the job finishes
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 800));
+      const st = await fetch('/scan/status/' + encodeURIComponent(start.job_id));
+      const job = await st.json();
+      if (!st.ok) { showError(job.error || 'Lost track of the scan. Please retry.'); setLoading(false); return; }
+      renderProgress(job);
+      if (job.status === 'done') {
+        currentResult = job.result;
+        saveHistory(job.result);
+        renderResult(job.result);
+        setLoading(false);
+        return;
+      }
+      if (job.status === 'error') { showError(job.error || 'Scan failed.'); setLoading(false); return; }
+    }
+    showError('Scan is taking too long. Please try again, or use Fast mode.');
   } catch (e) { showError('Network error: ' + e.message); }
   setLoading(false);
+}
+
+function renderProgress(job) {
+  const el = document.getElementById('loading-steps');
+  if (!el) return;
+  el.innerHTML = (job.steps || []).map(s => {
+    const done = s.status === 'done';
+    const t = done && s.ms != null ? ` <span style="color:var(--text3)">${(s.ms / 1000).toFixed(1)}s</span>` : '';
+    return `<div class="t-line"><span class="t-prompt">${done ? '✓' : '›'}</span><span>${esc(s.label)}${done ? t : '…'}</span></div>`;
+  }).join('') + `<div class="t-line" style="color:var(--text3)"><span class="t-prompt">⏱</span><span>${esc(job.elapsed || 0)}s elapsed</span></div>`;
 }
 
 function getInput() {
@@ -93,19 +119,8 @@ const DEEP_EXTRA = ['Running correlation engine…', 'Pivoting on discovered ide
 function showLoading(type, mode) {
   hide('empty-state'); hide('results');
   show('loading-state');
-  const steps = [...(LOADING_STEPS[type] || ['Running scan…']), ...(mode === 'deep' ? DEEP_EXTRA : [])];
-  const stepsEl = document.getElementById('loading-steps');
-  stepsEl.innerHTML = '';
-  let i = 0;
-  const iv = setInterval(() => {
-    if (i >= steps.length) { clearInterval(iv); return; }
-    const div = document.createElement('div');
-    div.className = 't-line';
-    div.innerHTML = `<span class="t-prompt">$</span><span>${esc(steps[i])}</span>`;
-    stepsEl.appendChild(div);
-    stepsEl.scrollTop = stepsEl.scrollHeight;
-    i++;
-  }, 800);
+  const el = document.getElementById('loading-steps');
+  if (el) el.innerHTML = '<div class="t-line"><span class="t-prompt">›</span><span>Queued…</span></div>';
 }
 
 // ── Main render ────────────────────────────────────────────────────────────────
@@ -168,15 +183,96 @@ function renderScamBanner(sr) {
     suspicious:        {c: 'var(--orange, #f90)', t: 'SUSPICIOUS'},
     no_strong_signals: {c: 'var(--green, #3c9)',  t: 'NO STRONG SCAM SIGNALS'},
   }[sr.verdict] || {c: 'var(--text3)', t: 'UNKNOWN'};
+  const pg = sr.page;
+  let deepHtml = '';
+  if (pg && !pg.error) {
+    const asks = [...new Set((pg.forms || []).flatMap(f => f.asks_for || []))];
+    deepHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);color:var(--text2);line-height:1.7">
+      <div style="color:var(--cyan);font-weight:700">PAGE ANALYSIS (deep)</div>
+      <div>Title: ${esc(pg.title || '(none)')}</div>
+      <div>Lands on: ${esc(pg.final_url)}${pg.chain && pg.chain.length > 1 ? ` &nbsp;(${pg.chain.length - 1} redirect${pg.chain.length > 2 ? 's' : ''})` : ''}</div>
+      <div>Asks for: ${asks.length ? esc(asks.join(', ')) : 'nothing sensitive'}</div>
+      <div>First archived: ${esc(sr.first_seen || 'never / unknown')}</div></div>`;
+  } else if (pg && pg.error) {
+    deepHtml = `<div style="margin-top:10px;color:var(--text3)">Page analysis could not run: ${esc(pg.error)}</div>`;
+  } else if (sr.deep_available && sr.mode === 'fast') {
+    deepHtml = `<div style="margin-top:10px;color:var(--text3)">Fast scan: the page itself was not inspected. Run a DEEP scan to analyze redirects, forms and page content.</div>`;
+  } else if (!sr.deep_available && sr.mode === 'deep') {
+    deepHtml = `<div style="margin-top:10px;color:var(--text3)">Deep mode adds nothing extra for this type.</div>`;
+  }
+  if (sr.mode === 'deep' && sr.web) {
+    const ex = (sr.web.examples || []).map(e => `<li><a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">${esc(e.title)}</a></li>`).join('');
+    deepHtml += `<div style="margin-top:10px;color:var(--text2)">Web check: ${sr.web.hits ? esc(sr.web.hits) + ' result(s) link this to scam/fraud wording' : 'no scam mentions found'}${ex ? `<ul style="margin:4px 0 0 16px">${ex}</ul>` : ''}</div>`;
+  } else if (sr.mode === 'fast' && sr.deep_available && sr.indicator && sr.indicator.kind !== 'domain') {
+    deepHtml = `<div style="margin-top:10px;color:var(--text3)">Run a DEEP scan to search the web for scam reports about this ${esc(sr.indicator.kind)}.</div>`;
+  }
+  if (sr.skipped && sr.skipped.length) {
+    deepHtml += `<div style="margin-top:10px;color:var(--orange,#f90)">Some checks were skipped, so this result may be incomplete: ${esc(sr.skipped.join('; '))}</div>`;
+  }
+  const fbHtml = sr.indicator ? `
+    <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);color:var(--text2)">
+      Was this verdict right?
+      <span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:6px">
+        <button class="action-btn" onclick="submitFeedback('correct')">[ YES ]</button>
+        <button class="action-btn" onclick="submitFeedback('safe')">[ ACTUALLY SAFE ]</button>
+        <button class="action-btn" onclick="submitFeedback('scam')">[ ACTUALLY A SCAM ]</button>
+      </span>
+      <span id="feedback-status" style="margin-left:8px;color:var(--text3)"></span>
+    </div>` : '';
+  const rep = sr.reports || {count: 0};
+  const repHtml = sr.indicator ? `
+    <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);color:var(--text2)">
+      Community reports: <b>${esc(rep.count || 0)}</b> <span style="color:var(--text3)">(unverified, last 6 months)</span>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <select id="report-cat" style="background:var(--bg2,#111);color:var(--text);border:1px solid var(--border);padding:4px;font-family:var(--mono);font-size:11px">
+          <option value="phishing">Phishing</option><option value="fake_job">Fake job</option>
+          <option value="upi_fraud">UPI fraud</option><option value="lottery_prize">Lottery/prize</option>
+          <option value="impersonation">Impersonation</option><option value="investment_scam">Investment scam</option>
+          <option value="loan_app">Loan app</option><option value="other">Other</option>
+        </select>
+        <button class="action-btn" onclick="submitReport()">[ REPORT AS SCAM ]</button>
+        <span id="report-status" style="color:var(--text3)"></span>
+      </div>
+    </div>` : '';
   const rows = (sr.signals || []).map(s =>
     `<li><b>+${esc(s.weight)}</b> ${esc(s.detail)}</li>`).join('');
   el.innerHTML = `
     <div style="border:1px solid ${meta.c};border-left:4px solid ${meta.c};border-radius:6px;padding:12px 14px;margin-bottom:12px;font-family:var(--mono);font-size:12px">
       <div style="color:${meta.c};font-weight:700;letter-spacing:.5px">${esc(meta.t)} &nbsp; ${esc(sr.score)}/100</div>
       ${rows ? `<ul style="margin:8px 0 0 16px;line-height:1.7">${rows}</ul>` : ''}
+      ${deepHtml}
+      ${fbHtml}
+      ${repHtml}
       ${(sr.feeds && sr.feeds.sources_checked && sr.feeds.sources_checked.length) ? `<div style="margin-top:8px;color:var(--text3);font-size:11px">Feeds checked: ${esc(sr.feeds.sources_checked.join(', '))}</div>` : ''}
       <div style="margin-top:8px;color:var(--text3);font-size:11px">${esc(sr.disclaimer)}</div>
     </div>`;
+}
+
+async function submitFeedback(label) {
+  const sr = currentResult && currentResult.scam_risk;
+  const st = document.getElementById('feedback-status');
+  if (!sr || !sr.indicator) return;
+  st.textContent = 'sending…';
+  try {
+    const res = await fetch('/feedback', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kind: sr.indicator.kind, value: sr.indicator.value, verdict: sr.verdict, label})});
+    const d = await res.json();
+    st.textContent = d.error ? d.error : d.status === 'duplicate' ? 'Already recorded, thanks.' : 'Thanks, this helps improve the checks.';
+  } catch (e) { st.textContent = 'Network error'; }
+}
+
+async function submitReport() {
+  const sr = currentResult && currentResult.scam_risk;
+  const st = document.getElementById('report-status');
+  if (!sr || !sr.indicator) return;
+  st.textContent = 'sending…';
+  try {
+    const res = await fetch('/report', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kind: sr.indicator.kind, value: sr.indicator.value,
+                            category: document.getElementById('report-cat').value})});
+    const d = await res.json();
+    st.textContent = d.error ? d.error : d.status === 'duplicate' ? 'You already reported this.' : 'Thanks, report recorded.';
+  } catch (e) { st.textContent = 'Network error'; }
 }
 
 // ── Summary bar ───────────────────────────────────────────────────────────────
