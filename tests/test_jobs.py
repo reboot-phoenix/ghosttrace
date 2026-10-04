@@ -186,3 +186,41 @@ def test_ddg_retries_once(monkeypatch):
             return [{"title": "t", "href": "https://ok", "body": "b"}]
     monkeypatch.setattr(srch, "DDGS", FakeDDGS)
     assert srch._ddg("q", 5)[0]["link"] == "https://ok" and attempts["n"] == 2
+
+
+# ── Google CSE quota awareness ────────────────────────────────────────────────
+def test_cse_quota_error_disables_engine_for_the_day(monkeypatch):
+    class Resp:
+        def json(self): return {"error": {"code": 429, "message": "Quota exceeded for quota metric"}}
+    calls = {"n": 0}
+    def fake_get(*a, **k):
+        calls["n"] += 1; return Resp()
+    monkeypatch.setattr(srch, "GOOGLE_CSE_KEY", "k"); monkeypatch.setattr(srch, "GOOGLE_CSE_ID", "i")
+    monkeypatch.setattr(srch.requests, "get", fake_get)
+    monkeypatch.setattr(srch, "_ddg", lambda q, n: [R("https://a"), R("https://b"), R("https://c")])
+    srch._cse.update(day="", used=0, exhausted=False, last_error=None)
+    assert len(srch.search("quota-q1")) == 3            # falls back to DDG
+    assert srch.search_status()["google_cse"]["exhausted"] is True
+    srch.search("quota-q2")
+    assert calls["n"] == 1                               # no more wasted CSE calls today
+    assert "429" in srch.search_status()["google_cse"]["last_error"]
+
+
+def test_cse_stops_at_daily_limit(monkeypatch):
+    monkeypatch.setattr(srch, "GOOGLE_CSE_KEY", "k"); monkeypatch.setattr(srch, "GOOGLE_CSE_ID", "i")
+    monkeypatch.setattr(srch, "CSE_DAILY_LIMIT", 2)
+    monkeypatch.setattr(srch, "_google_cse", lambda q, n: (srch._cse.__setitem__("used", srch._cse["used"] + 1), [R("https://g")])[1])
+    monkeypatch.setattr(srch, "_ddg", lambda q, n: [R("https://d1"), R("https://d2"), R("https://d3")])
+    srch._cse.update(day=srch._cse_today(), used=0, exhausted=False, last_error=None)
+    for i in range(4):
+        srch.search(f"limit-q{i}")
+    assert srch._cse["used"] == 2
+
+
+def test_fast_name_scan_uses_five_searches_deep_uses_all(monkeypatch):
+    from modules import name as nm
+    seen = []
+    monkeypatch.setattr(nm, "search", lambda q, max_results=10: (seen.append(q), [])[1])
+    nm.scan_name("Jane Roe", mode="fast"); fast = len(seen)
+    seen.clear(); nm.scan_name("Jane Roe", mode="deep")
+    assert fast == 5 and len(seen) == 14
