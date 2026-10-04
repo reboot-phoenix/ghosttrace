@@ -270,14 +270,6 @@ All data sources used are **publicly available**. GhostTrace does not store, log
 
 </div>
 
-## Scam-indicator checks
-
-GhostTrace now returns a `scam_risk` verdict (`likely_scam` / `suspicious` / `no_strong_signals`) with the evidence behind it, for phone numbers, UPI IDs, emails, domains and URLs. It judges *indicators*, not people, and is heuristic: verify with the official source and report fraud at cybercrime.gov.in or 1930.
-
-New/changed env vars: `LASTFM_API_KEY` (optional, replaces a previously hard-coded key), `SCAN_SIGNING_KEY` (set in production).
-
-Security hardening in v3.1: server-side validation of every scan type, SSRF-safe fetching (`modules/safe_http.py`), signed-result expiry on `/brief`, security headers, threaded gunicorn worker.
-
 ---
 
 <div align="center">
@@ -290,4 +282,24 @@ BSc IT — Techno India University
 </div>
 
 
+## Scam-indicator checks (v3.1)
 
+GhostTrace now returns a `scam_risk` verdict (`likely_scam` / `suspicious` / `no_strong_signals`) with the evidence behind it, for phone numbers, UPI IDs, emails, domains and URLs. It judges *indicators*, not people, and is heuristic: verify with the official source and report fraud at cybercrime.gov.in or 1930.
+
+New/changed env vars: `LASTFM_API_KEY` (optional, replaces a previously hard-coded key), `SCAN_SIGNING_KEY` (set in production).
+
+Security hardening in v3.1: server-side validation of every scan type, SSRF-safe fetching (`modules/safe_http.py`), signed-result expiry on `/brief`, security headers, threaded gunicorn worker.
+
+
+## How well do the scam heuristics work? (measured)
+
+`python tools/eval_heuristics.py` scores hosts with the offline heuristics only (no threat feeds, no page fetch) and reports the share flagged "suspicious" or worse. Latest run, 6,000 hosts per set:
+
+| Set | Flagged | Want |
+|---|---|---|
+| Real phishing hosts (Phishing.Database) | **24.9%** | high |
+| Legit, top-15k sites | 0.1% | low |
+| Legit, long tail of top-1M | 0.5% | low |
+| Legit sites on free hosts (blogspot, github.io, ...) | 5.4% | low |
+
+What this means: for a brand-new phishing site that no feed lists yet, the heuristics alone catch roughly a quarter, with few false alarms on ordinary sites. The rest need the feeds (known-bad lookup) and Deep mode (page analysis). A simple statistical model trained on the same data did no better once dataset artifacts were removed, so it is not used. Caveats: the phishing list is already-reported phishing, and top-1M sites are only a proxy for everyday legitimate sites.
