@@ -62,3 +62,30 @@ def mock_web_results():
         {"title": "John Doe GitHub",     "link": "https://github.com/johndoe",     "snippet": "Developer"},
         {"title": "Some Blog Post",       "link": "https://blog.example.com/post",  "snippet": "Article"},
     ]
+
+
+@pytest.fixture(autouse=True)
+def _no_real_search(monkeypatch):
+    """Unit tests must never touch the real network or wait on retry back-off."""
+    from modules import search as _s
+    monkeypatch.setattr(_s, "_sleep", lambda s: None)
+    class _Offline:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def text(self, *a, **k): raise RuntimeError("offline in tests")
+    monkeypatch.setattr(_s, "DDGS", _Offline)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_caches():
+    """Result/search caches are process-wide; isolate every test from the previous one."""
+    from modules import pipeline
+    pipeline.clear_cache()
+    try:
+        from modules import search as _s
+        _s.clear_cache()
+    except (ImportError, AttributeError):
+        pass
+    yield
