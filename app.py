@@ -40,7 +40,9 @@ from modules.scam import assess as assess_scam
 from modules.threat_feeds import check as check_feeds
 from modules.page_analysis import analyze as analyze_page, first_seen
 from modules import reports as report_db
-from modules import feed_db
+from modules import feed_db, jobs
+from modules.pipeline import run_scan
+from modules.timeouts import ScanTimeout
 from modules.web_mentions import scam_mentions
 from modules.email    import scan_email
 from modules.username import scan_username
@@ -168,14 +170,18 @@ def detect():
     kind = detect_input(query)
     return jsonify({"type": kind, "supported": kind in SUPPORTED_TYPES, "query": query})
 
-@app.route("/scan", methods=["POST"])
-@rate_limited("scan")
-def scan():
-    body      = request.get_json(silent=True) or {}
+def _scanners() -> dict:
+    """Looked up at call time so tests can patch app.scan_* functions."""
+    return {"email": scan_email, "username": scan_username, "phone": scan_phone,
+            "name": scan_name, "ip": scan_ip, "domain": scan_domain}
+
+
+def _prepare(body: dict):
+    """Validate a scan request. Returns (params, None) or (None, error_response)."""
     query     = (body.get("query") or "").strip()
     scan_type = (body.get("scan_type") or "").strip().lower()
     filters   = body.get("filters", [])
-    mode      = (body.get("mode") or "fast").strip().lower()  # "fast" or "deep"
+    mode      = (body.get("mode") or "fast").strip().lower()
     if mode not in ("fast", "deep"):
         mode = "fast"
     if not isinstance(filters, list):
@@ -183,9 +189,9 @@ def scan():
     filters = [str(f)[:60] for f in filters[:5]]
 
     if not query:
-        return jsonify({"error": "No query provided"}), 400
+        return None, (jsonify({"error": "No query provided"}), 400)
     if len(query) > 320:
-        return jsonify({"error": "Query too long"}), 400
+        return None, (jsonify({"error": "Query too long"}), 400)
     if not scan_type or scan_type == "auto":
         scan_type = detect_input(query)
 
@@ -198,71 +204,50 @@ def scan():
             query, scan_type = host, "domain"
 
     if scan_type not in SUPPORTED_TYPES:
-        return jsonify({"error": f"Unsupported type: {scan_type}. Supported: {sorted(SUPPORTED_TYPES)}"}), 400
+        return None, (jsonify({"error": f"Unsupported type: {scan_type}. Supported: {sorted(SUPPORTED_TYPES)}"}), 400)
     # Never trust a client-supplied scan_type: the value must actually match it
     if not is_valid_for_type(scan_type, query):
-        return jsonify({"error": f"Query is not a valid {scan_type}"}), 400
+        return None, (jsonify({"error": f"Query is not a valid {scan_type}"}), 400)
+    return {"query": query, "scan_type": scan_type, "mode": mode,
+            "filters": filters, "original_url": original_url}, None
 
+
+@app.route("/scan", methods=["POST"])
+@rate_limited("scan")
+def scan():
+    params, err = _prepare(request.get_json(silent=True) or {})
+    if err:
+        return err
     try:
-        # ── Run the scan ──────────────────────────────────────────────────
-        if scan_type == "email":    raw = scan_email(query)
-        elif scan_type == "username": raw = scan_username(query)
-        elif scan_type == "phone":  raw = scan_phone(query)
-        elif scan_type == "name":   raw = scan_name(query, filters)
-        elif scan_type == "ip":     raw = scan_ip(query)
-        elif scan_type == "domain": raw = scan_domain(query)
-        elif scan_type == "upi":    raw = {"type": "upi", "query": query, "score": 0, "chips": []}
-        else: return jsonify({"error": "Unknown scan type"}), 400
-
-        raw["scan_type"] = scan_type
-        raw["timestamp"] = int(time.time())
-        raw["mode"]      = mode
-
-        # ── Correlation + report (deep adds network pivots + social pivoting) ──
-        if scan_type == "upi":      # indicator-only: no crawling, nothing to correlate
-            correlation = {"identity": {}, "findings": [], "pivots": []}
-        else:
-            correlation = correlate(raw, deep=(mode == "deep"))
-        report      = build_report(raw, correlation, scan_mode=mode)
-
-        # Scam-indicator verdict (evidence-based, indicator-centric)
-        ctx = {}
-        if scan_type in ("phone", "upi", "email", "domain"):
-            try:
-                ctx["reports"] = report_db.summary(scan_type, query)
-            except Exception:
-                app.logger.exception("report lookup failed")
-            if mode == "deep":      # DEEP: ask the open web whether it's already called a scam
-                ctx["web"] = scam_mentions(scan_type, query)
-        if scan_type == "domain":
-            rdap = raw.get("rdap") or {}
-            ctx.update(domain_created=rdap.get("registered") or None, has_rdap=bool(rdap))
-        feeds = {"hits": [], "sources_checked": []}
-        if scan_type == "domain":
-            feeds = check_feeds(original_url or query)
-            ctx["feed_hits"] = feeds["hits"]
-            if mode == "deep":     # DEEP: actually look at the page + site history
-                ctx["page"] = analyze_page(original_url or f"https://{query}")
-                ctx["first_seen"] = first_seen(query)
-        scam_risk = assess_scam("url" if original_url else scan_type,
-                                original_url or query, ctx)
-        scam_risk["feeds"] = feeds
-        scam_risk["mode"] = mode
-        scam_risk["deep_available"] = scan_type in ("domain", "phone", "upi", "email")
-        scam_risk["indicator"] = {"kind": scan_type, "value": query} if scan_type in ("phone", "upi", "email", "domain") else None
-        scam_risk["reports"] = ctx.get("reports")
-        scam_risk["web"] = ctx.get("web")
-        if ctx.get("page"):
-            scam_risk["page"] = ctx["page"]
-            scam_risk["first_seen"] = ctx.get("first_seen")
-
-        payload = {**raw, "correlation": correlation, "report": report, "scam_risk": scam_risk}
-        payload["_sig"] = _sign(payload)
+        payload = run_scan(params, _scanners(), _sign)
         return jsonify(payload)
-
+    except ScanTimeout as e:
+        return jsonify({"error": str(e)}), 504
     except Exception:
-        app.logger.exception("scan failed (type=%s)", scan_type)
+        app.logger.exception("scan failed (type=%s)", params["scan_type"])
         return jsonify({"error": "Scan failed. Please try again."}), 500
+
+@app.route("/scan/start", methods=["POST"])
+@rate_limited("scan")
+def scan_start():
+    params, err = _prepare(request.get_json(silent=True) or {})
+    if err:
+        return err
+    scanners = _scanners()
+    try:
+        jid = jobs.submit(lambda progress: run_scan(params, scanners, _sign, progress),
+                          request.remote_addr or "unknown")
+    except jobs.Busy as e:
+        return jsonify({"error": str(e)}), e.code
+    return jsonify({"job_id": jid, "type": params["scan_type"]}), 202
+
+@app.route("/scan/status/<job_id>")
+@rate_limited("scan-status", 1800)
+def scan_status(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Unknown or expired job"}), 404
+    return jsonify(job)
 
 @app.route("/report", methods=["POST"])
 @rate_limited("report", 10)
