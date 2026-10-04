@@ -32,8 +32,31 @@ INDIAN_BRANDS = {
     "bluedart": ["bluedart.com"], "tcs": ["tcs.com"], "infosys": ["infosys.com"],
 }
 
+# TLD list: classic abuse TLDs plus those that appeared in ~0% of top sites but a large share
+# of real phishing in tools/eval_heuristics.py (link, club, free Freenom TLDs).
 SUSPICIOUS_TLDS = {"xyz", "top", "click", "shop", "online", "site", "icu", "work",
-                   "support", "live", "vip", "buzz", "rest", "cfd", "sbs", "monster"}
+                   "support", "live", "vip", "buzz", "rest", "cfd", "sbs", "monster",
+                   "link", "club", "tk", "ml", "ga", "cf", "gq", "pw", "cyou", "bond"}
+
+# Free / shared hosting: legitimate developers use these too, so this is a WEAK signal on
+# its own and only matters together with others (e.g. a random-looking name).
+SHARED_HOSTING = {
+    "github.io", "pages.dev", "web.app", "firebaseapp.com", "blogspot.com", "weebly.com",
+    "wixsite.com", "herokuapp.com", "netlify.app", "vercel.app", "workers.dev", "r2.dev",
+    "000webhostapp.com", "glitch.me", "repl.co", "onrender.com", "webflow.io", "carrd.co",
+    "godaddysites.com", "mystrikingly.com", "wordpress.com", "notion.site", "ngrok.io",
+    "ngrok-free.app", "trycloudflare.com", "duckdns.org", "ddns.net", "hopto.org",
+    "azurewebsites.net", "appspot.com", "sites.google.com", "ipfs.io", "dweb.link",
+}
+# Cloud/CDN infrastructure: machine-generated hostnames are normal here, so skip the
+# "random subdomain" rule for them.
+CLOUD_INFRA = {"cloudfront.net", "amazonaws.com", "azureedge.net", "akamaihd.net", "akamaized.net",
+               "googleusercontent.com", "fbcdn.net", "cloudapp.azure.com", "elb.amazonaws.com",
+               "fastly.net", "edgekey.net", "windows.net", "trafficmanager.net", "herokudns.com"}
+_BENIGN_SUB = {"www", "m", "mail", "api", "cdn", "static", "login", "accounts", "docs", "support",
+               "help", "dashboard", "console", "portal", "app", "blog", "shop", "store", "my",
+               "web", "en", "hi", "s3", "assets", "img", "images", "media", "dev", "staging",
+               "netbanking", "retail", "pay", "business", "merchant", "developer", "learn"}
 
 SCAM_KEYWORDS = ("kyc", "verify", "update", "refund", "reward", "lottery", "prize",
                  "claim", "free", "bonus", "winner", "cashback", "suspend", "blocked",
@@ -83,9 +106,28 @@ _LEET = str.maketrans({"0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t
 
 def _registrable(host: str) -> str:
     parts = host.lower().strip(".").split(".")
-    if len(parts) >= 3 and parts[-2] in ("co", "gov", "ac", "org", "net") and len(parts[-1]) == 2:
+    if len(parts) >= 3 and parts[-2] in ("co", "com", "gov", "ac", "org", "net", "edu", "or", "ne", "go", "web") and len(parts[-1]) == 2:
         return ".".join(parts[-3:])
     return ".".join(parts[-2:]) if len(parts) >= 2 else host.lower()
+
+
+def _looks_random(text: str) -> bool:
+    """Auto-generated look: letters mixed with digits, very few vowels, or long consonant runs.
+    Readable long names (blog titles, brand names) deliberately do not count."""
+    t = re.sub(r"[^a-z0-9]", "", text.lower())
+    letters = [c for c in t if c.isalpha()]
+    digits = sum(c.isdigit() for c in t)
+    if len(t) < 8:
+        return False
+    if digits >= 2 and letters:
+        return True
+    if letters and sum(c in "aeiou" for c in letters) / len(letters) < 0.28:
+        return True
+    run = best = 0
+    for c in t:
+        run = run + 1 if (c.isalpha() and c not in "aeiou") else 0
+        best = max(best, run)
+    return best >= 5
 
 
 def _verdict(score: int) -> str:
@@ -126,10 +168,15 @@ def assess_domain(host: str, url: str | None = None, context: dict | None = None
         if reg in legit or any(host.endswith("." + l) for l in legit):
             return s  # genuine brand domain: heuristics skipped (feed hits, if any, still count)
     tokens = set(re.split(r"[.\-_]", deleet))
-    flat = deleet.replace("-", "").replace(".", "")
+    label_is_brand = label.translate(_LEET) in INDIAN_BRANDS and tld not in SUSPICIOUS_TLDS
     for brand in INDIAN_BRANDS:
-        # short brands (sbi, jio, tcs…) must match a whole token to avoid false positives
-        if (brand in flat) if len(brand) >= 5 else (brand in tokens):
+        if label_is_brand:      # e.g. amazon.de / amazon.com.mx: regional official domains
+            break
+        # a brand must be a whole token, or start/end a token (sbi-kyc, paytmreward); this avoids
+        # accidents like "uidai" inside "liquida.it". Short brands (sbi, jio…) need a whole token.
+        hit = (brand in tokens) or (len(brand) >= 5 and any(
+            t.startswith(brand) or t.endswith(brand) for t in tokens))
+        if hit:
             s.append(_sig("brand_in_domain", 40,
                           f"Contains brand '{brand}' but is not an official {brand} domain"))
             break
@@ -138,6 +185,24 @@ def assess_domain(host: str, url: str | None = None, context: dict | None = None
             if len(brand) >= 4 and 0 < _lev(label.translate(_LEET), brand) <= 1:
                 s.append(_sig("typosquat", 45, f"Looks like a typo of '{brand}'"))
                 break
+
+    # ── structure signals found by comparing 390k real phishing hosts with top sites ──
+    shared_parent = next((p for p in SHARED_HOSTING if host.endswith("." + p)), None)
+    cloud = any(host.endswith("." + p) or host == p for p in CLOUD_INFRA)
+    sub_part = host[: -len(shared_parent)].strip(".") if shared_parent else (
+        host[: -len(reg)].strip(".") if host.endswith(reg) else "")
+    sub_labels = [x for x in sub_part.split(".") if x and x not in _BENIGN_SUB and len(x) > 2]
+    sub_flat = ".".join(sub_labels)
+    if shared_parent:
+        s.append(_sig("shared_hosting", 12,
+                      f"Hosted on free/shared platform ({shared_parent}); weak signal alone"))
+    if sub_flat and not cloud:
+        if re.search(r"\d{6,}", sub_flat):
+            s.append(_sig("numeric_subdomain", 30, "Subdomain contains a long number (auto-generated look)"))
+        elif len(sub_flat) >= 12 and _looks_random(sub_flat):
+            s.append(_sig("long_subdomain", 25, "Long, random-looking subdomain (auto-generated)"))
+    if len(label) >= 20 and not shared_parent:
+        s.append(_sig("long_name", 8, "Very long domain name"))
 
     if host.startswith("xn--") or ".xn--" in host:
         s.append(_sig("punycode", 35, "Punycode (possible look-alike characters)"))
