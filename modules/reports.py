@@ -50,6 +50,12 @@ def _conn() -> sqlite3.Connection:
                     reporter TEXT NOT NULL, ts INTEGER NOT NULL,
                     UNIQUE(indicator, reporter));
                 CREATE INDEX IF NOT EXISTS idx_ind ON reports(indicator);
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    indicator TEXT NOT NULL, verdict TEXT NOT NULL, label TEXT NOT NULL,
+                    reporter TEXT NOT NULL, ts INTEGER NOT NULL,
+                    UNIQUE(indicator, reporter));
+                CREATE INDEX IF NOT EXISTS idx_fb ON feedback(label, verdict);
             """)
             c.execute("INSERT OR IGNORE INTO meta VALUES ('salt', ?)", (secrets.token_hex(16),))
             c.commit()
