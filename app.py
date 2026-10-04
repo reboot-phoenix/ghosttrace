@@ -41,6 +41,7 @@ from modules.threat_feeds import check as check_feeds
 from modules.page_analysis import analyze as analyze_page, first_seen
 from modules import reports as report_db
 from modules import feed_db, jobs
+from modules.search import search_status
 from modules.pipeline import run_scan
 from modules.timeouts import ScanTimeout
 from modules.web_mentions import scam_mentions
@@ -154,7 +155,8 @@ def health():
         feeds = feed_db.stats()
     except Exception:
         feeds = {}
-    return jsonify({"status": "online", "service": "GhostTrace", "version": "3.1", "feeds": feeds})
+    return jsonify({"status": "online", "service": "GhostTrace", "version": "3.1", "feeds": feeds,
+                    "search": search_status()})
 
 @app.route("/ping")
 def ping():
