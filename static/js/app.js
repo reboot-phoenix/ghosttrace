@@ -1,6 +1,6 @@
 /* GhostTrace v3 — Intelligence Report Frontend */
 
-let currentTab    = 'name';
+let currentTab    = 'domain';
 let currentResult = null;
 let currentMode   = 'fast';
 const HISTORY_KEY = 'gt3_history';
@@ -44,6 +44,21 @@ function renderFilters() {
 }
 
 // ── Scan ──────────────────────────────────────────────────────────────────────
+function toggleAdvanced() {
+  const grid = document.getElementById('advanced-grid');
+  const btn = document.getElementById('advanced-toggle');
+  const open = grid.style.display !== 'none';
+  grid.style.display = open ? 'none' : 'grid';
+  btn.textContent = (open ? '⚙ Research tools (name/username lookup, domain recon) ▾'
+                          : '⚙ Research tools (name/username lookup, domain recon) ▴');
+}
+
+function fillExample(tab, value) {
+  switchTab(tab);
+  const el = document.getElementById('input-' + tab);
+  if (el) { el.value = value; el.focus(); }
+}
+
 async function runScan() {
   const { query, scan_type } = getInput();
   if (!query) { showError('Please enter a value to scan.'); return; }
@@ -102,6 +117,7 @@ function getInput() {
   }
   if (currentTab === 'ip')     query = (document.getElementById('input-ip')?.value     || '').trim();
   if (currentTab === 'domain') query = (document.getElementById('input-domain')?.value || '').trim();
+  if (currentTab === 'upi')    query = (document.getElementById('input-upi')?.value    || '').trim();
   return { query, scan_type: currentTab };
 }
 
@@ -144,6 +160,7 @@ function renderResult(data) {
 
   // Scam verdict banner (indicator-based)
   renderScamBanner(data.scam_risk);
+  renderRecon(data.recon);
 
   // Intelligence summary bar
   renderSummaryBar(report, data);
@@ -166,6 +183,55 @@ function renderResult(data) {
   document.querySelectorAll('.section-header').forEach(h => {
     h.addEventListener('click', () => h.closest('.section').classList.toggle('collapsed'));
   });
+}
+
+// ── Attack-surface recon (passive) ───────────────────────────────────────────
+function renderRecon(r) {
+  let el = document.getElementById('recon-panel');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'recon-panel';
+    const host = document.getElementById('intel-summary');
+    host.parentNode.insertBefore(el, host);
+  }
+  if (!r) { el.innerHTML = ''; return; }
+  const rows = (r.hosts || []).map(h => {
+    const status = h.alive === true ? `<span style="color:var(--green,#3c9)">UP ${esc(h.status ?? '')}</span>`
+                 : h.live_check_blocked ? `<span style="color:var(--orange,#f90)" title="resolves to a private/internal address — not probed">blocked</span>`
+                 : h.alive === false ? `<span style="color:var(--text3)">down</span>`
+                 : `<span style="color:var(--text3)">—</span>`;
+    return `<tr>
+      <td>${esc(h.host)}</td><td>${esc(h.ip || '—')}</td>
+      <td>${esc(h.org || '—')}${h.country ? ' (' + esc(h.country) + ')' : ''}</td>
+      <td>${status}</td>
+      <td>${h.redirects_to ? '→ ' + esc(h.redirects_to) : ''}</td>
+    </tr>`;
+  }).join('');
+  const ipClusters = (r.clusters?.shared_ip || []).map(c =>
+    `<li><b>${esc(c.ip)}</b>: ${c.hosts.map(esc).join(', ')}</li>`).join('');
+  const orgClusters = (r.clusters?.shared_org || []).map(c =>
+    `<li><b>${esc(c.org)}</b>: ${c.hosts.map(esc).join(', ')}</li>`).join('');
+  const cdnClusters = [...(r.clusters?.common_provider_ip || []), ...(r.clusters?.common_provider_org || [])];
+  const cdnLine = cdnClusters.length
+    ? `<div style="margin-top:8px;color:var(--text3)">Also behind a shared CDN/cloud provider (routine, not shown as a finding): ${
+        [...new Set(cdnClusters.flatMap(c => c.hosts))].map(esc).join(', ')}</div>` : '';
+  const warnings = (r.warnings || []).map(w => `<div>⚠ ${esc(w)}</div>`).join('');
+  el.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:12px;font-family:var(--mono);font-size:12px">
+      <div style="color:var(--cyan);font-weight:700;letter-spacing:.5px">ATTACK SURFACE RECON (passive — cert transparency, DNS, RDAP only) &nbsp; ${esc(r.subdomain_count)} host(s)</div>
+      <div style="color:var(--text3);margin:4px 0 8px">For domains you're authorized to test. No active scanning or port probing was performed.</div>
+      <div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:4px">
+        <table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--text3);text-align:left">
+          <th style="padding:4px 8px">Host</th><th style="padding:4px 8px">IP</th><th style="padding:4px 8px">Org</th>
+          <th style="padding:4px 8px">Status</th><th style="padding:4px 8px">Redirect</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan=5 style="padding:8px;color:var(--text3)">No subdomains found in certificate transparency logs.</td></tr>'}</tbody></table>
+      </div>
+      ${ipClusters ? `<div style="margin-top:10px"><b>Shared IP (same server):</b><ul style="margin:4px 0 0 16px">${ipClusters}</ul></div>` : ''}
+      ${orgClusters ? `<div style="margin-top:10px"><b>Shared hosting org:</b><ul style="margin:4px 0 0 16px">${orgClusters}</ul></div>` : ''}
+      ${cdnLine}
+      ${warnings ? `<div style="margin-top:10px;color:var(--orange,#f90)">${warnings}</div>` : ''}
+      ${r.elapsed_s != null ? `<div style="margin-top:6px;color:var(--text3)">Recon took ${esc(r.elapsed_s)}s</div>` : ''}
+    </div>`;
 }
 
 // ── Scam verdict banner ───────────────────────────────────────────────────────
@@ -222,7 +288,9 @@ function renderScamBanner(sr) {
   const rep = sr.reports || {count: 0};
   const repHtml = sr.indicator ? `
     <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);color:var(--text2)">
-      Community reports: <b>${esc(rep.count || 0)}</b> <span style="color:var(--text3)">(unverified, last 6 months)</span>
+      ${(rep.count || 0) >= 2
+        ? `Community reports: <b>${esc(rep.count)}</b> <span style="color:var(--text3)">(unverified, last 6 months)</span>`
+        : `<span style="color:var(--text3)">No community reports yet for this one — be the first to flag it if you believe it's a scam.</span>`}
       <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <select id="report-cat" style="background:var(--bg2,#111);color:var(--text);border:1px solid var(--border);padding:4px;font-family:var(--mono);font-size:11px">
           <option value="phishing">Phishing</option><option value="fake_job">Fake job</option>
@@ -244,7 +312,7 @@ function renderScamBanner(sr) {
       ${fbHtml}
       ${repHtml}
       ${(sr.feeds && sr.feeds.sources_checked && sr.feeds.sources_checked.length) ? `<div style="margin-top:8px;color:var(--text3);font-size:11px">Feeds checked: ${esc(sr.feeds.sources_checked.join(', '))}</div>` : ''}
-      <div style="margin-top:8px;color:var(--text3);font-size:11px">${esc(sr.disclaimer)}</div>
+      <div style="margin-top:8px;color:var(--text3);font-size:11px">Automated checks like this one catch roughly 1 in 4 brand-new scam sites that aren't on any known-bad list yet — a "no strong signals" result is not a guarantee. ${esc(sr.disclaimer)}</div>
     </div>`;
 }
 
