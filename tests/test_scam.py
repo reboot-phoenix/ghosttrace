@@ -162,8 +162,25 @@ def test_safe_get_records_chain(monkeypatch):
         status_code = 200; is_redirect = False; headers = {}
         def iter_content(self, n): yield b"hi"
         def close(self): pass
-    monkeypatch.setattr(sh.requests, "get", lambda *a, **k: R())
+    monkeypatch.setattr(sh.requests, "request", lambda method, *a, **k: R())
     assert sh.safe_get("https://a.example").chain == ["https://a.example"]
+
+
+def test_safe_head_blocks_ssrf_and_redirect_to_private(monkeypatch):
+    from modules import safe_http as sh
+    with pytest.raises(sh.UnsafeURL):
+        sh.safe_head("http://169.254.169.254/latest/meta-data/")
+
+    # a *remote-looking* URL that 302s to a private address must still be blocked, because the
+    # redirect target is re-validated before it is followed
+    monkeypatch.setattr(sh, "validate_url", lambda u: u if "127.0.0.1" not in u else (_ for _ in ()).throw(sh.UnsafeURL("blocked")))
+    class Redirect:
+        status_code = 302; is_redirect = True; headers = {"Location": "http://127.0.0.1/admin"}
+        def iter_content(self, n): return iter(())
+        def close(self): pass
+    monkeypatch.setattr(sh.requests, "request", lambda method, url, **k: Redirect())
+    with pytest.raises(sh.UnsafeURL):
+        sh.safe_head("https://looks-public.example")
 
 
 # ── community reports + web mentions ──────────────────────────────────────────
