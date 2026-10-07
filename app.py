@@ -32,7 +32,7 @@ from collections import defaultdict, deque
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from detector import detect_input, is_valid_for_type, SUPPORTED_TYPES
@@ -148,6 +148,27 @@ def _verify(result: dict) -> bool:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/about")
+def about():
+    return render_template("about.html")
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+@app.route("/robots.txt")
+def robots_txt():
+    return Response("User-agent: *\nAllow: /\nSitemap: " + request.host_url + "sitemap.xml\n",
+                    mimetype="text/plain")
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    urls = ["", "about", "privacy"]
+    body = "".join(f"<url><loc>{request.host_url}{u}</loc></url>" for u in urls)
+    return Response(f'<?xml version="1.0" encoding="UTF-8"?>'
+                    f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',
+                    mimetype="application/xml")
 
 @app.route("/health")
 def health():
