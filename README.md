@@ -315,3 +315,8 @@ It does not learn by itself; it improves through a loop a maintainer runs:
 4. **Fix and measure**: change a signal in `modules/scam.py`, run `pytest` (the golden cases must all still pass) and `python tools/eval_heuristics.py` (detection up, false alarms not up), then update the table above.
 
 Env vars: `ADMIN_TOKEN` (enables the review endpoint; leave unset to disable it), `REPORTS_DB` (put it on a persistent volume so feedback survives deploys).
+
+
+## Attack-surface recon (deep domain scans)
+
+A deep scan on a domain now also runs **passive** recon: certificate-transparency subdomain discovery (crt.sh), DNS resolution, RDAP/WHOIS, and ASN/org lookup for every resolved host, then clusters hosts that share an IP or a hosting org, and does a plain HTTP HEAD check (not a content fetch) to see what's still alive. No port scanning, no active probing beyond that HEAD request, no brute-forcing — this is for mapping what already exists on the public record for a domain you're authorized to test (yours, or in scope for an engagement), the same boundary passive-mode Amass and Subfinder draw. 45-second budget; if it runs long, the scan still returns everything else and notes recon was skipped.
