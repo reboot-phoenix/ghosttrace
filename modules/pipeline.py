@@ -17,6 +17,7 @@ from modules.threat_feeds import check as check_feeds
 from modules.page_analysis import analyze as analyze_page, first_seen
 from modules.web_mentions import scam_mentions
 from modules import reports as report_db
+from modules.recon import recon_domain
 
 log = logging.getLogger("ghosttrace.pipeline")
 
@@ -99,11 +100,13 @@ def run_scan(p: dict, scanners: dict, sign, progress=lambda label: None) -> dict
         if mode == "deep":
             tasks["page"] = (analyze_page, (url or f"https://{query}",), 15)
             tasks["history"] = (first_seen, (query,), 8)
+            tasks["recon"] = (recon_domain, (query,), 45)
     if mode == "deep" and st in ("phone", "upi", "email", "domain"):
         tasks["web"] = (scam_mentions, (st, query), 15)
     res = gather(tasks) if tasks else {}
 
-    LABEL = {"feeds": "Threat feeds", "page": "Page analysis", "history": "Site history", "web": "Web check"}
+    LABEL = {"feeds": "Threat feeds", "page": "Page analysis", "history": "Site history",
+            "web": "Web check", "recon": "Attack-surface recon"}
     for name, r in res.items():
         if not r["ok"]:
             skipped.append(f"{LABEL[name]} ({r['error']})")
@@ -118,6 +121,7 @@ def run_scan(p: dict, scanners: dict, sign, progress=lambda label: None) -> dict
             ctx["first_seen"] = None
     if res.get("web", {}).get("ok"):
         ctx["web"] = res["web"]["value"]
+    recon_result = res["recon"]["value"] if res.get("recon", {}).get("ok") else None
 
     # 4 ── verdict ----------------------------------------------------------
     progress("Scoring")
@@ -133,6 +137,8 @@ def run_scan(p: dict, scanners: dict, sign, progress=lambda label: None) -> dict
         scam_risk["first_seen"] = ctx.get("first_seen")
 
     payload = {**raw, "correlation": correlation, "report": report, "scam_risk": scam_risk}
+    if recon_result is not None:
+        payload["recon"] = recon_result
     payload["_sig"] = sign(payload)
     if not skipped:               # never cache a partial result
         _cache.set(key, payload)

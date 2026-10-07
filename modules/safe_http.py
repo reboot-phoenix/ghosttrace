@@ -49,15 +49,16 @@ def validate_url(url: str) -> str:
     return url
 
 
-def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
-    """GET with per-hop validation and a capped body. Returns a Response (body capped)."""
-    headers = headers or {"User-Agent": "GhostTrace/3.1"}
+def _follow(method: str, url: str, timeout: int, headers: dict, read_body: bool):
+    """Shared per-hop-validated request used by both safe_get and safe_head: every hop,
+    including each redirect target, is re-validated before it is fetched — a redirect to a
+    private/internal address is refused exactly like a direct request to one would be."""
     current = url
     chain = [url]
     for _ in range(MAX_REDIRECTS + 1):
         validate_url(current)
-        r = requests.get(current, timeout=timeout, headers=headers,
-                         allow_redirects=False, stream=True)
+        r = requests.request(method, current, timeout=timeout, headers=headers,
+                             allow_redirects=False, stream=True)
         if r.is_redirect or r.status_code in (301, 302, 303, 307, 308):
             loc = r.headers.get("Location")
             r.close()
@@ -66,13 +67,26 @@ def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
             current = urljoin(current, loc)
             chain.append(current)
             continue
-        body = b""
-        for chunk in r.iter_content(8192):
-            body += chunk
-            if len(body) >= MAX_BYTES:
-                break
-        r._content = body
+        if read_body:
+            body = b""
+            for chunk in r.iter_content(8192):
+                body += chunk
+                if len(body) >= MAX_BYTES:
+                    break
+            r._content = body
         r.close()
         r.chain = chain          # every URL visited, in order
         return r
     raise UnsafeURL("too many redirects")
+
+
+def safe_get(url: str, timeout: int = 8, headers: dict | None = None):
+    """GET with per-hop validation and a capped body. Returns a Response (body capped)."""
+    return _follow("GET", url, timeout, headers or {"User-Agent": "GhostTrace/3.1"}, read_body=True)
+
+
+def safe_head(url: str, timeout: int = 5, headers: dict | None = None):
+    """HEAD with per-hop validation (no body to cap). Raises UnsafeURL on a blocked target or
+    a redirect into one — use this for any HEAD/liveness check against a URL you did not type
+    in yourself (e.g. a host discovered via certificate-transparency logs)."""
+    return _follow("HEAD", url, timeout, headers or {"User-Agent": "GhostTrace/3.1"}, read_body=False)
