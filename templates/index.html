@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GhostTrace — OSINT Intelligence Platform</title>
+<title>GhostTrace — Free Scam & Fraud Checker (India)</title>
+<meta name="description" content="Paste a suspicious link, phone number, UPI ID, or email and get a free scam risk check with evidence. Built by a cybersecurity student. No login, nothing stored beyond what's needed to run the check.">
+<meta property="og:title" content="GhostTrace — Free Scam & Fraud Checker">
+<meta property="og:description" content="Check if a link, number, or UPI ID is a scam — free, no login.">
+<meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -16,21 +20,29 @@
     <div class="logo-icon">👻</div>
     <div>
       <div class="logo-title">GhostTrace</div>
-      <div class="logo-sub">OSINT · v3.0</div>
+      <div class="logo-sub">Free Scam Checker</div>
     </div>
   </div>
 
+  <div class="scan-section-label">Check a scam</div>
   <div class="scan-type-grid">
-    <button class="type-btn active" data-tab="name"     onclick="switchTab('name')"><span class="type-icon">👤</span><span class="type-label">Name</span></button>
-    <button class="type-btn" data-tab="username"  onclick="switchTab('username')"><span class="type-icon">🔍</span><span class="type-label">Username</span></button>
-    <button class="type-btn" data-tab="email"     onclick="switchTab('email')"><span class="type-icon">📧</span><span class="type-label">Email</span></button>
+    <button class="type-btn active" data-tab="domain"    onclick="switchTab('domain')"><span class="type-icon">🔗</span><span class="type-label">Link / Website</span></button>
     <button class="type-btn" data-tab="phone"     onclick="switchTab('phone')"><span class="type-icon">📱</span><span class="type-label">Phone</span></button>
-    <button class="type-btn" data-tab="ip"        onclick="switchTab('ip')"><span class="type-icon">🌐</span><span class="type-label">IP Addr</span></button>
-    <button class="type-btn" data-tab="domain"    onclick="switchTab('domain')"><span class="type-icon">🔗</span><span class="type-label">Domain</span></button>
+    <button class="type-btn" data-tab="upi"       onclick="switchTab('upi')"><span class="type-icon">💳</span><span class="type-label">UPI ID</span></button>
+    <button class="type-btn" data-tab="email"     onclick="switchTab('email')"><span class="type-icon">📧</span><span class="type-label">Email</span></button>
+  </div>
+
+  <button id="advanced-toggle" class="scan-section-label" style="cursor:pointer;background:none;border:none;width:100%;text-align:left" onclick="toggleAdvanced()">
+    ⚙ Research tools (name/username lookup, domain recon) ▾
+  </button>
+  <div class="scan-type-grid" id="advanced-grid" style="display:none">
+    <button class="type-btn" data-tab="name"     onclick="switchTab('name')"><span class="type-icon">👤</span><span class="type-label">Name</span></button>
+    <button class="type-btn" data-tab="username"  onclick="switchTab('username')"><span class="type-icon">🔍</span><span class="type-label">Username</span></button>
+    <button class="type-btn" data-tab="ip"        onclick="switchTab('ip')"><span class="type-icon">🖥️</span><span class="type-label">IP Addr</span></button>
   </div>
 
   <div class="scan-form-area">
-    <div id="form-name" class="scan-form">
+    <div id="form-name" class="scan-form hidden">
       <label class="form-label">Full Name</label>
       <input id="input-name" class="input-main" type="text" placeholder="e.g. John Doe" autocomplete="off">
       <label class="form-label">Context Filters <span style="opacity:.5;font-size:9px">(optional)</span></label>
@@ -79,10 +91,17 @@
       <input id="input-ip" class="input-main" type="text" placeholder="e.g. 1.1.1.1" autocomplete="off">
       <div class="form-hint">Geo · ISP · Shodan ports + CVEs · RDAP · Proxy</div>
     </div>
-    <div id="form-domain" class="scan-form hidden">
-      <label class="form-label">Domain / URL</label>
-      <input id="input-domain" class="input-main" type="text" placeholder="e.g. example.com" autocomplete="off">
-      <div class="form-hint">WHOIS · DNS · crt.sh subdomains · Shodan · Wayback</div>
+    <div id="form-domain" class="scan-form">
+      <label class="form-label">Link or Website</label>
+      <input id="input-domain" class="input-main" type="text" placeholder="paste the link you received, e.g. sbi-kyc-verify.xyz" autocomplete="off">
+      <div class="form-hint">Checks against known scam lists, page content, and domain age</div>
+      <div class="example-chips">Try: <a href="#" onclick="fillExample('domain','sbi-kyc-update.xyz');return false;">sbi-kyc-update.xyz</a></div>
+    </div>
+    <div id="form-upi" class="scan-form hidden">
+      <label class="form-label">UPI ID</label>
+      <input id="input-upi" class="input-main" type="text" placeholder="e.g. somename@okaxis" autocomplete="off">
+      <div class="form-hint">Checks the handle against known-scam patterns and user reports</div>
+      <div class="example-chips">Try: <a href="#" onclick="fillExample('upi','refund.support123@okaxis');return false;">refund.support123@okaxis</a></div>
     </div>
 
     <!-- Scan mode toggle -->
@@ -105,7 +124,10 @@
 
   <div class="sidebar-footer">
     <button class="theme-toggle" onclick="toggleTheme()">[ LIGHT ]</button>
-    <div class="disclaimer">// authorized use only</div>
+    <div class="footer-links">
+      <a href="/about">About</a> · <a href="/privacy">Privacy</a>
+    </div>
+    <div class="disclaimer">Free · No login · Built by a student</div>
   </div>
 </aside>
 

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy — GhostTrace</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<main class="doc-page">
+  <a href="/" class="doc-back">← Back to GhostTrace</a>
+  <h1>Privacy</h1>
+  <p>No account or login is required to use GhostTrace. Here is exactly what happens to what you type in.</p>
+
+  <h2>When you run a check</h2>
+  <p>What you search for (a link, number, UPI ID, or email) is sent to GhostTrace's server to run the check, and to the public services it queries (such as known-scam lists). It is not linked to your name or any account, because none exists. Search results are cached briefly (up to 10 minutes) to avoid repeating identical lookups, then expire.</p>
+
+  <h2>When you submit feedback or a report</h2>
+  <p>If you click "Report as scam" or answer "Was this verdict right?", GhostTrace stores: the indicator you reported (the number/UPI ID/link itself), your answer, and a one-way scrambled (hashed) version of your IP address — not the IP address itself — so the same person can't vote on the same thing twice. No name, phone number of yours, or account is attached. This data may be visible, in aggregate, to the maintainer reviewing how the checks are performing.</p>
+
+  <h2>What is never stored</h2>
+  <p>GhostTrace does not ask for or store your name, your own phone number or email, passwords, OTPs, or any government ID. If a "research tools" scan (name or username lookup) finds information on the public web, that information comes from public search results at the time of the scan — it is not saved by GhostTrace afterward.</p>
+
+  <h2>Hosting</h2>
+  <p>GhostTrace runs on Railway. Standard web server logs (IP address, timestamp, page requested) may be kept briefly by the hosting provider for operating the service, separate from anything described above.</p>
+
+  <h2>Questions</h2>
+  <p>This project is run by one student, not a company with a support team. Questions or removal requests can be raised via the <a href="https://github.com/reboot-phoenix/ghosttrace/issues" target="_blank" rel="noopener">GitHub issues page</a>.</p>
+</main>
+</body>
+</html>
